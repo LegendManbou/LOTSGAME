@@ -257,6 +257,8 @@ function thumbify(notes, P) {
 
     const base = [0, 1, 2, 3].filter((l) => holds.every((h) => l !== h.lane && HOLD_ALLOW[h.lane].includes(l)));
     const mate = i > 0 && Math.abs(notes[i - 1].t - nt.t) < 0.0001 ? notes[i - 1] : null;
+    // ロング押し中は同時押し禁止(親指は2本): ロング+2ノーツ=3押しになる並びを消す
+    if (mate && holds.length) { notes.splice(i, 1); i--; continue; }
     const fastPrev = !mate && nt.t - prevT < FAST && (prevSides === 1 || prevSides === 2);
     const filters = [
       (l) => nt.t - lastLaneT[l] >= REUSE,                                  // レーン再使用
