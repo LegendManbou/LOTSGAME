@@ -222,6 +222,29 @@ body::before {
 .analyze-status { text-align: center; color: var(--yellow); font-size: 12.5px; font-weight: 700; padding: 10px 16px; min-height: 20px; }
 .credit { text-align: center; color: var(--sub); font-size: 10.5px; line-height: 1.8; padding: 18px 20px 40px; }
 
+/* ── ランキング ── */
+.rank-panel { max-width: 380px; text-align: left; max-height: 88dvh; overflow-y: auto; }
+.rank-panel h2 { font-size: 22px; margin-bottom: 12px; }
+.rank-select {
+  width: 100%; padding: 11px 12px; border-radius: 12px;
+  background: rgba(6, 10, 32, .9); color: #eef2ff;
+  border: 1.5px solid rgba(140, 150, 255, .3);
+  font-family: inherit; font-weight: 800; font-size: 13.5px; outline: none;
+}
+.rank-list { margin-top: 12px; min-height: 60px; color: var(--sub); font-size: 13px; }
+.rank-row {
+  display: flex; align-items: center; gap: 8px;
+  background: rgba(10, 16, 44, .8); border: 1px solid rgba(140, 150, 255, .2);
+  border-radius: 12px; padding: 9px 12px; margin-bottom: 6px;
+  font-weight: 800; font-size: 13.5px; color: #eef2ff;
+}
+.rank-row.me { border-color: #7dffa9; box-shadow: 0 0 10px rgba(125, 255, 169, .25); }
+.rank-no { flex: 0 0 44px; font-style: italic; }
+.rank-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rank-score { color: #4ffcff; font-weight: 900; }
+.rank-empty { text-align: center; color: var(--sub); padding: 20px 0; }
+.rank-note { color: var(--sub); font-size: 10.5px; margin-top: 10px; text-align: center; }
+
 /* ── 設定モーダル ── */
 .settings-panel { max-width: 380px; text-align: left; max-height: 88dvh; overflow-y: auto; }
 .panel-close {

@@ -1088,6 +1088,7 @@ function showResult() {
   const prev = Number(localStorage.getItem(hsKey) || 0);
   const isNew = score > prev;
   if (isNew) localStorage.setItem(hsKey, String(score));
+  submitOnline(score);   // オンラインランキングへ(内蔵曲のみ・自己ベスト更新時だけ反映)
   $("resultNew").classList.toggle("hidden", !isNew);
   $("resultScreen").classList.remove("hidden");
   renderSongList();
@@ -1167,6 +1168,67 @@ function renderSongList() {
     list.appendChild(card);
   }
 }
+
+// ────────────────── オンラインランキング(Firebase RTDB・全員共有) ──────────────────
+const LB_BASE = "https://otogame-39fe1-default-rtdb.firebaseio.com/nbRank";
+const lbName = () => (localStorage.getItem("lg_name") || "ななしさん").slice(0, 12);
+const escHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+function lbBoards() {
+  const list = [];
+  for (const def of SONG_DEFS) for (const d of DIFFS) {
+    if (def.godOnly && d !== "god") continue;
+    const lv = (def.lvOv && def.lvOv[d] != null) ? def.lvOv[d] : def.lvBase + DIFF_META[d].lv;
+    list.push({ key: `${def.id}_${d}`, lv, label: `Lv.${lv} ${def.name} [${DIFF_META[d].label}]` });
+  }
+  return list.sort((a, b) => a.lv - b.lv);
+}
+async function lbFetchBoard(key) {
+  const r = await fetch(`${LB_BASE}/${key}.json`, { cache: "no-store" });
+  if (!r.ok) throw new Error("lb " + r.status);
+  return (await r.json()) || [];
+}
+async function submitOnline(sc) {
+  try {
+    if (!SONG_DEFS.some((s) => s.id === current.id)) return;   // 自分の曲は対象外
+    const key = `${current.id}_${diff}`;
+    const name = lbName();
+    const arr = await lbFetchBoard(key);
+    const mine = arr.find((e) => e.n === name);
+    if (mine && mine.s >= sc) return;                          // 更新なしなら書き込まない
+    if (mine) mine.s = sc; else arr.push({ n: name, s: sc });
+    arr.sort((a, b) => b.s - a.s);
+    await fetch(`${LB_BASE}/${key}.json`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(arr.slice(0, 30)) });
+  } catch (_) {}                                               // 電波がなくても遊びは止めない
+}
+async function renderRanking() {
+  const key = $("rankSelect").value;
+  const list = $("rankList");
+  list.textContent = "よみこみ中…";
+  try {
+    const arr = await lbFetchBoard(key);
+    if (!arr.length) { list.innerHTML = `<div class="rank-empty">まだ記録なし。一番のりしよう!</div>`; return; }
+    list.innerHTML = "";
+    arr.slice(0, 20).forEach((e, i) => {
+      const row = document.createElement("div");
+      row.className = "rank-row" + (e.n === lbName() ? " me" : "");
+      row.innerHTML = `<span class="rank-no">${["🥇", "🥈", "🥉"][i] || (i + 1) + "位"}</span><span class="rank-name">${escHtml(e.n)}</span><span class="rank-score">${Number(e.s).toLocaleString()}</span>`;
+      list.appendChild(row);
+    });
+  } catch (_) {
+    list.innerHTML = `<div class="rank-empty">よみこめなかった…電波を確認してね</div>`;
+  }
+}
+$("rankBtn").onclick = () => {
+  const sel = $("rankSelect");
+  if (!sel.options.length) for (const b of lbBoards()) sel.add(new Option(b.label, b.key));
+  const saved = localStorage.getItem("nb_rank_key");
+  if (saved && [...sel.options].some((o) => o.value === saved)) sel.value = saved;
+  $("rankOverlay").classList.remove("hidden");
+  renderRanking();
+};
+$("rankSelect").onchange = () => { localStorage.setItem("nb_rank_key", $("rankSelect").value); renderRanking(); };
+$("rankClose").onclick = () => $("rankOverlay").classList.add("hidden");
+$("rankOverlay").addEventListener("click", (e) => { if (e.target === $("rankOverlay")) $("rankOverlay").classList.add("hidden"); });
 
 // 難易度切り替え
 document.querySelectorAll(".diff-btn").forEach((b) => {

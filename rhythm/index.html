@@ -17,7 +17,7 @@
       <a class="back-btn" href="../">←</a>
       <button id="settingsBtn" class="gear-btn" aria-label="設定">⚙️</button>
       <h1 class="game-logo">NEON<span>BEATS</span></h1>
-      <span class="spacer"></span>
+      <button id="rankBtn" class="gear-btn" aria-label="ランキング">🏆</button>
     </header>
 
     <p class="sub">夜のセカイで奏でるオリジナル音ゲー🌙 スマホはタテ持ちがおすすめ!</p>
@@ -86,6 +86,17 @@
       </div>
 
       <button id="settingsSave" class="big-btn">保存して閉じる</button>
+    </div>
+  </div>
+
+  <!-- ── ランキング ── -->
+  <div id="rankOverlay" class="overlay hidden">
+    <div class="panel rank-panel">
+      <button id="rankClose" class="panel-close" aria-label="閉じる">✕</button>
+      <h2>🏆 ランキング</h2>
+      <select id="rankSelect" class="rank-select"></select>
+      <div id="rankList" class="rank-list">よみこみ中…</div>
+      <p class="rank-note">なまえはトップページ(LOTSGAME)の⚙設定で決められるよ</p>
     </div>
   </div>
 
