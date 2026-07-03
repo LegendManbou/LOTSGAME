@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#12121f">
+  <title>LOTSGAME — みんなで遊ぶブラウザゲーム99</title>
+  <meta name="description" content="スマホでみんなで遊べるブラウザゲームを99本あつめたポータル。部屋IDを共有して同じゲームに集合しよう!">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎮</text></svg>">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <header class="header">
+    <button id="settingsBtn" class="icon-btn" aria-label="設定">⚙️</button>
+    <h1 class="logo">🎮 LOTSGAME</h1>
+    <button id="roomBadge" class="room-badge" aria-label="部屋情報">
+      <span id="roomDot" class="dot"></span>
+      <span id="roomLabel">部屋なし</span>
+    </button>
+  </header>
+
+  <div id="memberBar" class="member-bar hidden"></div>
+
+  <p class="tagline">みんなで遊べるブラウザゲーム <b>99</b>本!<br>タップでゲームにジャンプ🚀 部屋に入ると「誰が何を選んだか」がみんなに届くよ</p>
+
+  <div id="catFilter" class="cat-filter"></div>
+
+  <main id="grid" class="grid"></main>
+
+  <footer class="footer">
+    LOTSGAME — リンクを知ってる人はだれでも参加OK 🎉<br>
+    各ゲームはそれぞれの公式サイトで動きます
+  </footer>
+
+  <!-- 設定モーダル -->
+  <div id="modalOverlay" class="modal-overlay hidden">
+    <div class="modal" role="dialog" aria-label="設定">
+      <button id="modalClose" class="modal-close" aria-label="閉じる">✕</button>
+      <h2 class="modal-title">⚙️ 設定</h2>
+
+      <label class="field-label" for="nameInput">なまえ</label>
+      <input id="nameInput" class="text-input" type="text" maxlength="12" placeholder="れいじ など(12文字まで)">
+
+      <label class="field-label" for="roomInput">部屋ID(4桁の数字)</label>
+      <input id="roomInput" class="text-input" type="tel" inputmode="numeric" maxlength="4" pattern="[0-9]*" placeholder="1234">
+
+      <div class="room-btns">
+        <button id="createRoomBtn" class="btn btn-create">🏠 部屋を作る</button>
+        <button id="joinRoomBtn" class="btn btn-join">🚪 部屋に入る</button>
+      </div>
+      <button id="leaveRoomBtn" class="btn btn-leave hidden">👋 部屋から出る</button>
+
+      <p id="roomStatus" class="room-status"></p>
+
+      <div class="modal-footer">
+        <button id="saveBtn" class="btn btn-save">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toastArea" class="toast-area"></div>
+
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="js/games.js"></script>
+  <script src="js/thumbs.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
