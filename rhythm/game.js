@@ -167,7 +167,7 @@ const SONG_DEFS = [
   { id: "cyber", name: "サイバー・パレード", emoji: "🤖", bpm: 146, seed: 27, bars: 36, root: 57, mode: "minor", prog: [0, 5, 2, 6], wave: "square", lvBase: 6, desc: "ズンズン進むエレクトロ行進曲" },
   { id: "overdrive", name: "ネオン・オーバードライブ", emoji: "⚡", bpm: 168, seed: 42, bars: 38, root: 52, mode: "minor", prog: [0, 6, 5, 4], wave: "sawtooth", lvBase: 9, lvOv: { god: 38 }, desc: "最高速のクライマックス。腕が試される" },
   // GOD専用の裏ボス。lvBaseは譜面生成に使われるため9のまま、密度はdemonフラグで別枠制御
-  { id: "demon", name: "デーモンズ・インフェルノ", emoji: "👹", bpm: 205, seed: 666, bars: 40, root: 48, mode: "minor", prog: [0, 1, 6, 5], wave: "sawtooth", lvBase: 9, godOnly: true, demon: true, desc: "GOD専用。人間には押せない。逃げてもいい" },
+  { id: "demon", name: "デーモンズ・インフェルノ", emoji: "👹", bpm: 205, seed: 666, bars: 40, root: 48, mode: "minor", prog: [0, 1, 6, 5], wave: "sawtooth", lvBase: 9, godOnly: true, demon: true, desc: "GOD専用。逃げてもいいよ" },
 ];
 
 // 曲データ(音イベント列)を種から決定的に生成する
