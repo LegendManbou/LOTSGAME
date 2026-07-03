@@ -10,15 +10,28 @@ const TORSO_Y = 1.05;                    // キーパー胴体の中心高さ
 const RUNUP = 1.15;                      // 助走の秒数(この間に守る準備!)
 const DIVE_DUR = 0.55, DIVE_MAX = GOAL_W; // 飛びこみ(フルスワイプでゴール端から端まで)
 const COLLIDE_D = 0.8;                   // キーパー同士がぶつかる距離(飛びこみ中のみ)
-const SET_DUR = 6;                       // 配置タイム秒数
-const KICK_TIMEOUT = 12000;              // キッカーが蹴らない時の自動キック
 const KEEPER_X_MAX = GOAL_W / 2 - 0.45;  // スタート位置の左右かぎり
-const MAX_KEEPERS = 9, MAX_MEMBERS = 10; // 最大10人(キッカー1+キーパー9)
+const MAX_KEEPERS = 9, MAX_MEMBERS = 10; // 最大10人(キッカー+キーパー9)
+const MAX_BALLS = 3;                     // 同時に蹴れる最大人数
 const slotXs = (n) => {                  // n人ぶんの初期位置をゴール幅に均等配置
   if (n <= 1) return [0];
   const span = 5.7 * (n - 1) / n;
   return Array.from({ length: n }, (_, i) => -span / 2 + (span * i) / (n - 1));
 };
+const ballSx = (slot, n) => (slot - (n - 1) / 2) * 2.2;   // 同時キック時のボール開始位置
+
+const TEAMS = [
+  { name: "レッド", emoji: "🔴", color: "#ff5c74" },
+  { name: "ブルー", emoji: "🔵", color: "#4f9cff" },
+  { name: "グリーン", emoji: "🟢", color: "#7dffa9" },
+  { name: "イエロー", emoji: "🟡", color: "#ffe066" },
+];
+// CPUの強さ(guess=読み当てる率 / dive=飛びこみのブレ / wild=キックが枠外に暴れる率)
+const CPU_LVS = [
+  { guess: 0.45, dive: 1.3, wild: 0.25 },   // よわい
+  { guess: 0.68, dive: 0.7, wild: 0.10 },   // ふつう
+  { guess: 0.87, dive: 0.4, wild: 0.04 },   // つよい
+];
 
 const flightT = (pow) => 1.0 - 0.5 * pow;            // 強いほど速い
 const arcH = (pow) => (1 - pow) * 1.0 + 0.12;        // 弱いほどふんわり
@@ -36,16 +49,27 @@ const store = {
 const G = {
   mode: "solo",            // solo | room
   phase: "lobby",          // lobby | set | aim | fly | verdict | final
-  cfg: { keepers: 1, rounds: 5, cycles: 1 },
+  cfg: {
+    keepers: 1, rounds: 5, cycles: 1,
+    kickersN: 1,           // 同時に蹴る人数(ボールの数)
+    setDur: 6,             // 配置タイム秒
+    kickLimit: 12,         // キック制限秒
+    cpuLevel: 1,           // 0よわい 1ふつう 2つよい
+    sudden: false,         // サドンデス
+    teamMode: false,
+  },
   round: 0, totalRounds: 0,
   members: [],             // room: [{mid, name}] / solo: [{mid:0, name:あなた}]
   myMid: 0,
-  kicker: null,            // {mid|null, name, cpu}
-  keepers: [],             // [{mid|null, name, cpu, x, dive:null|{dx,dy,len,t}, avatar}]
-  kick: null,              // {tx, ty, pow, launchAt(perfMs)}
+  kickers: [],             // 今ラウンドの蹴る人 [{mid|null, name, cpu, avatar}]
+  keepers: [],             // [{mid|null, name, cpu, x, dive, avatar}]
+  kicks: [],               // slotごと {sx,tx,ty,pow,crv,launchAt(ms)}|null
+  teams: null,             // チーム戦: [{emoji,name,mids:[..]}]
+  roundTeam: null,         // 今蹴ってるチームindex
+  activeMids: null,        // 部屋: 試合に参加中のmid Set
+  roundKickLimit: 12,
   scores: {},              // name -> pts
   myDove: false, myKicked: false,
-  verdictShown: false,
   simCache: null,
 };
 
@@ -132,15 +156,22 @@ for (const [x, z, c] of [[-14, 4, 0x4ffcff], [14, 4, 0xff6bd6], [-11, 22, 0x7dff
   scene.add(lamp);
 }
 
-// ボール
-const ball = new THREE.Mesh(
-  new THREE.SphereGeometry(BALL_R + 0.03, 20, 20),
-  new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x222233, roughness: 0.3 })
-);
-scene.add(ball);
-const ballShadow = new THREE.Mesh(new THREE.CircleGeometry(0.16, 16), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35 }));
-ballShadow.rotation.x = -Math.PI / 2;
-scene.add(ballShadow);
+// ボール(同時キック用に3個プール)
+const balls = [], ballShadows = [];
+for (let i = 0; i < MAX_BALLS; i++) {
+  const b = new THREE.Mesh(
+    new THREE.SphereGeometry(BALL_R + 0.03, 20, 20),
+    new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x222233, roughness: 0.3 })
+  );
+  b.visible = false;
+  scene.add(b);
+  balls.push(b);
+  const sh = new THREE.Mesh(new THREE.CircleGeometry(0.16, 16), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35 }));
+  sh.rotation.x = -Math.PI / 2;
+  sh.visible = false;
+  scene.add(sh);
+  ballShadows.push(sh);
+}
 
 // 人のアバター
 const PLAYER_COLORS = [0x4ffcff, 0xff6bd6, 0x7dffa9, 0xffe066, 0xb46bff, 0xff8c5a];
@@ -186,9 +217,8 @@ function makeAvatar(name, colorIdx, isKeeper) {
   scene.add(g);
   return g;
 }
-let kickerAvatar = null;
 function clearAvatars() {
-  if (kickerAvatar) { scene.remove(kickerAvatar); kickerAvatar = null; }
+  for (const k of G.kickers) if (k.avatar) scene.remove(k.avatar);
   for (const k of G.keepers) if (k.avatar) scene.remove(k.avatar);
 }
 
@@ -246,12 +276,13 @@ function updateCamera() {
 }
 
 // ────────────────── シミュレーション(判定のキモ・全員同じ計算) ──────────────────
-// ボールの位置(カーブは横方向のふくらみ crv で表現、着地点は tx のまま)
+// ボールの位置(sx=開始位置、カーブは横方向のふくらみ crv で表現、着地点は tx のまま)
 function ballPos(kick, t) {
   const T = flightT(kick.pow), H = arcH(kick.pow);
   const s = clamp(t / T, 0, 1);
+  const sx = kick.sx || 0;
   return new THREE.Vector3(
-    kick.tx * s + (kick.crv || 0) * 4 * s * (1 - s),
+    sx + (kick.tx - sx) * s + (kick.crv || 0) * 4 * s * (1 - s),
     BALL_R + (kick.ty - BALL_R) * s + H * 4 * s * (1 - s),
     SPOT_Z * (1 - s)
   );
@@ -282,70 +313,86 @@ function ballHitsBody(pose, bp) {
   return Math.hypot(Math.hypot(bp.x - hd.x, bp.y - hd.y), dz) < 0.17 + BALL_R + 0.07;
 }
 
-// kick: {tx,ty,pow,crv} / keepers: [{x, dive:{dx,dy,len,t}|null}] (tはボール発射=0とした秒)
-function simulate(kick, keepers) {
-  const T = flightT(kick.pow);
-  const dt = 1 / 120;
-  const ks = keepers.map((k) => ({ x0: k.x, dive: k.dive, frozenAt: Infinity }));
-  const ballP = (t) => ballPos(kick, t);
-  const poseOf = (k, t) => {
+// 複数ボール対応: 時間は絶対ms(kick.launchAt / dive.atMs)ベース
+// kicks: [{sx,tx,ty,pow,crv,launchAt}|null] / keepers: [{x, dive:{dx,dy,len,atMs}|null}]
+function simulateAll(kicks, keepers) {
+  const live = kicks.filter(Boolean);
+  const ks = keepers.map((k) => ({ x0: k.x, dive: k.dive, frozenAt: Infinity }));   // frozenAtはms
+  const poseAt = (k, ms) => {
     if (!k.dive) return { x: k.x0, y: 0, rotZ: 0 };
-    const p = clamp((Math.min(t, k.frozenAt) - k.dive.t) / DIVE_DUR, 0, 1);
+    const p = clamp((Math.min(ms, k.frozenAt) - k.dive.atMs) / 1000 / DIVE_DUR, 0, 1);
     return divePose(k.x0, k.dive, p);
   };
   // キーパー同士の衝突(強い=長いスワイプが勝ち、負けた方はぶつかった所で止まる)
   // ※移動中(飛ぶ前)の重なりはOK。飛んだ後だけ力関係が働く
-  const t0 = Math.min(0, ...ks.filter((k) => k.dive).map((k) => k.dive.t));
-  const wasApart = new Map();            // ペアが一度はなれてから当たった時だけ衝突あつかい
-  let firstTick = true;
-  const centers = ks.map(() => ({ x: 0, y: 0 }));
-  for (let t = t0; t <= T + DIVE_DUR; t += dt) {
-    for (let i = 0; i < ks.length; i++) {
-      const c = bodyPoint(poseOf(ks[i], t), 0.75);
-      centers[i].x = c.x; centers[i].y = c.y;
-    }
-    for (let i = 0; i < ks.length; i++) for (let j = i + 1; j < ks.length; j++) {
-      const a = ks[i], b = ks[j];
-      const key = i * 16 + j;
-      const near = Math.hypot(centers[i].x - centers[j].x, centers[i].y - centers[j].y) < COLLIDE_D;
-      if (near && wasApart.get(key) && !firstTick) {
-        const movingA = a.dive && t > a.dive.t && t < a.dive.t + DIVE_DUR && a.frozenAt === Infinity;
-        const movingB = b.dive && t > b.dive.t && t < b.dive.t + DIVE_DUR && b.frozenAt === Infinity;
-        if (movingA && movingB && Math.abs(a.dive.len - b.dive.len) > 0.45) {
-          if (a.dive.len > b.dive.len) b.frozenAt = t; else a.frozenAt = t;
-        } else {
-          if (movingA) a.frozenAt = t;
-          if (movingB) b.frozenAt = t;
+  const divers = ks.filter((k) => k.dive);
+  if (divers.length && ks.length > 1) {
+    const t0 = Math.min(...divers.map((k) => k.dive.atMs));
+    const t1 = Math.max(
+      ...divers.map((k) => k.dive.atMs + DIVE_DUR * 1000),
+      ...(live.length ? live.map((c) => c.launchAt + flightT(c.pow) * 1000) : [t0])
+    );
+    const dt = 1000 / 120;
+    const wasApart = new Map();          // ペアが一度はなれてから当たった時だけ衝突あつかい
+    let firstTick = true;
+    const centers = ks.map(() => ({ x: 0, y: 0 }));
+    for (let ms = t0; ms <= t1; ms += dt) {
+      for (let i = 0; i < ks.length; i++) {
+        const c = bodyPoint(poseAt(ks[i], ms), 0.75);
+        centers[i].x = c.x; centers[i].y = c.y;
+      }
+      for (let i = 0; i < ks.length; i++) for (let j = i + 1; j < ks.length; j++) {
+        const a = ks[i], b = ks[j];
+        const key = i * 16 + j;
+        const near = Math.hypot(centers[i].x - centers[j].x, centers[i].y - centers[j].y) < COLLIDE_D;
+        if (near && wasApart.get(key) && !firstTick) {
+          const movingA = a.dive && ms > a.dive.atMs && ms < a.dive.atMs + DIVE_DUR * 1000 && a.frozenAt === Infinity;
+          const movingB = b.dive && ms > b.dive.atMs && ms < b.dive.atMs + DIVE_DUR * 1000 && b.frozenAt === Infinity;
+          if (movingA && movingB && Math.abs(a.dive.len - b.dive.len) > 0.45) {
+            if (a.dive.len > b.dive.len) b.frozenAt = ms; else a.frozenAt = ms;
+          } else {
+            if (movingA) a.frozenAt = ms;
+            if (movingB) b.frozenAt = ms;
+          }
+          if (movingA || movingB) wasApart.set(key, false);
         }
-        if (movingA || movingB) wasApart.set(key, false);
+        if (!near) wasApart.set(key, true);
       }
-      if (!near) wasApart.set(key, true);
-    }
-    firstTick = false;
-  }
-  // セーブ判定(体にちゃんと当たった時だけ弾く)
-  for (let t = 0; t <= T; t += dt) {
-    const bp = ballP(t);
-    for (let i = 0; i < ks.length; i++) {
-      if (ballHitsBody(poseOf(ks[i], t), bp)) {
-        return { res: "save", by: i, hitT: t, hitPos: bp, frozen: ks.map((k) => k.frozenAt) };
-      }
+      firstTick = false;
     }
   }
-  // ゴールかミスか
-  const inX = Math.abs(kick.tx) <= GOAL_W / 2 - 0.08;
-  const inY = kick.ty >= 0 && kick.ty <= GOAL_H - 0.08;
-  const nearPostX = Math.abs(Math.abs(kick.tx) - GOAL_W / 2) < 0.18 && kick.ty < GOAL_H;
-  const nearBarY = Math.abs(kick.ty - GOAL_H) < 0.18 && Math.abs(kick.tx) < GOAL_W / 2;
-  let res = inX && inY ? "goal" : "miss";
-  if (res === "miss" && (nearPostX || nearBarY)) res = "post";
-  return { res, by: -1, hitT: T, hitPos: ballP(T), frozen: ks.map((k) => k.frozenAt) };
+  // 各ボールの判定(体にちゃんと当たった時だけ弾く)
+  const results = kicks.map((kick) => {
+    if (!kick) return null;
+    const T = flightT(kick.pow);
+    for (let t = 0; t <= T; t += 1 / 120) {
+      const bp = ballPos(kick, t);
+      const ms = kick.launchAt + t * 1000;
+      for (let i = 0; i < ks.length; i++) {
+        if (ballHitsBody(poseAt(ks[i], ms), bp)) {
+          return { res: "save", by: i, hitT: t, hitPos: bp };
+        }
+      }
+    }
+    const inX = Math.abs(kick.tx) <= GOAL_W / 2 - 0.08;
+    const inY = kick.ty >= 0 && kick.ty <= GOAL_H - 0.08;
+    const nearPostX = Math.abs(Math.abs(kick.tx) - GOAL_W / 2) < 0.18 && kick.ty < GOAL_H;
+    const nearBarY = Math.abs(kick.ty - GOAL_H) < 0.18 && Math.abs(kick.tx) < GOAL_W / 2;
+    let res = inX && inY ? "goal" : "miss";
+    if (res === "miss" && (nearPostX || nearBarY)) res = "post";
+    return { res, by: -1, hitT: T, hitPos: ballPos(kick, T) };
+  });
+  return { results, frozen: ks.map((k) => k.frozenAt) };
 }
 
 function getSim() {
-  const key = JSON.stringify([G.kick && [G.kick.tx, G.kick.ty, G.kick.pow], G.keepers.map((k) => [k.x, k.dive])]);
+  if (!G.kicks.some(Boolean)) return null;
+  const key = JSON.stringify([
+    G.kicks.map((c) => c && [c.sx, c.tx, c.ty, c.pow, c.crv, c.launchAt]),
+    G.keepers.map((k) => [k.x, k.dive && [k.dive.dx, k.dive.dy, k.dive.len, k.dive.atMs]]),
+  ]);
   if (!G.simCache || G.simCache.key !== key) {
-    G.simCache = { key, sim: G.kick ? simulate(G.kick, G.keepers) : null };
+    G.simCache = { key, sim: simulateAll(G.kicks, G.keepers) };
   }
   return G.simCache.sim;
 }
@@ -391,6 +438,18 @@ function renderMembers() {
   }
   $("hostSettings").classList.toggle("hidden", !(net.isHost && G.members.length >= 1));
   $("guestWait").classList.toggle("hidden", !(net.peer && !net.isHost && G.members.length >= 1));
+  renderTeamAssign();
+  renderGamePanel();
+}
+
+// ホストがキックを受けつけていいか(スロットの持ち主か・まだ蹴ってないか)
+function hostAcceptsKick(msg, senderMid) {
+  if (G.phase !== "aim" && G.phase !== "fly") return false;
+  const slot = msg.slot | 0;
+  const k = G.kickers[slot];
+  if (!k || G.kicks[slot]) return false;
+  if (senderMid === -1) return true;                  // CPU/自動キック(ホスト発)
+  return !k.cpu && k.mid === senderMid;
 }
 
 function createRoom(id) {
@@ -403,7 +462,7 @@ function createRoom(id) {
     G.myMid = 0;
     G.members = [{ mid: 0, name: myName() }];
     store.lastRoom = id;
-    setRoomStatus(`部屋 ${id} を作ったよ!みんなに伝えて「部屋に入る」してもらってね`, "ok");
+    setRoomStatus(`部屋 ${id} を作ったよ!みんなに伝えて「部屋に入る」してもらってね(最大10人)`, "ok");
     renderMembers();
   });
   peer.on("connection", (conn) => {
@@ -422,8 +481,8 @@ function createRoom(id) {
         conn.send({ t: "welcome", mid });
         net.relay({ t: "members", list: G.members });
       } else {
-        // 配置タイム中のキックは受けつけない(ホストが門番)
-        if (msg.t === "kick" && (G.phase !== "aim" || G.kick)) return;
+        // キックはホストが門番(スロット不正・二重うちを防ぐ)
+        if (msg.t === "kick" && !hostAcceptsKick(msg, conn._mid)) return;
         net.relay({ ...msg, mid: conn._mid });
       }
     });
@@ -501,111 +560,238 @@ function peerError(err) {
 
 // ────────────────── 試合の進行(ホスト/ソロが仕切る) ──────────────────
 const host = {
-  order: [], roundNo: 0, timers: [],
-  kickAt: 0,               // ボール発射のperformance.now()
+  order: [],               // [{ks:[{mid}|{cpu:true},...], team:idx|null}]
+  roundNo: 0, timers: [], suddenN: 0, cpuDivesArmed: false,
   clearTimers() { for (const t of this.timers) clearTimeout(t); this.timers = []; },
   after(ms, fn) { this.timers.push(setTimeout(fn, ms)); },
 
-  startMatch() {
+  // 全員が1回ずつ蹴る1周ぶんのラウンドを作る
+  buildCycleChunks() {
+    const kn = clamp(G.cfg.kickersN, 1, MAX_BALLS);
+    const chunks = [];
+    if (G.mode === "solo") {
+      const cpus = (n) => Array.from({ length: n }, () => ({ cpu: true }));
+      chunks.push({ ks: [{ mid: 0 }, ...cpus(kn - 1)], team: null });
+      chunks.push({ ks: cpus(kn), team: null });
+      return chunks;
+    }
+    const active = G.members.filter((m) => G.activeMids.has(m.mid));
+    if (G.teams) {
+      G.teams.forEach((t, ti) => {
+        const mids = t.mids.filter((mid) => active.some((m) => m.mid === mid));
+        for (let i = 0; i < mids.length; i += kn) {
+          chunks.push({ ks: mids.slice(i, i + kn).map((mid) => ({ mid })), team: ti });
+        }
+      });
+    } else {
+      const mids = active.map((m) => m.mid);
+      for (let i = 0; i < mids.length; i += kn) {
+        chunks.push({ ks: mids.slice(i, i + kn).map((mid) => ({ mid })), team: null });
+      }
+    }
+    return chunks;
+  },
+
+  startMatch(teams) {
     this.clearTimers();
+    this.suddenN = 0;
     const scores = {};
     if (G.mode === "solo") {
-      this.order = [];
-      for (let i = 0; i < G.cfg.rounds; i++) { this.order.push({ mid: 0 }); this.order.push({ cpu: true }); }
+      G.teams = null;
+      G.activeMids = new Set([0]);
       scores["あなた"] = 0; scores["CPU"] = 0;
-    } else {
       this.order = [];
-      for (let c = 0; c < G.cfg.cycles; c++) for (const m of G.members) this.order.push({ mid: m.mid });
+      for (let r = 0; r < G.cfg.rounds; r++) this.order.push(...this.buildCycleChunks());
+    } else {
+      G.teams = teams || null;
+      G.activeMids = new Set(G.members.map((m) => m.mid));
       for (const m of G.members) scores[m.name] = 0;
       if (this.needsCpu()) scores["CPU"] = 0;
+      this.order = [];
+      for (let c = 0; c < G.cfg.cycles; c++) this.order.push(...this.buildCycleChunks());
     }
     this.roundNo = 0;
-    net.send({ t: "start", scores });
+    net.send({ t: "start", scores, teams: G.teams, active: [...G.activeMids] });
     this.after(600, () => this.startRound());
   },
   needsCpu() {
     const humans = G.members.length - 1;
     const want = G.cfg.keepers === 0 ? clamp(humans, 1, MAX_KEEPERS) : G.cfg.keepers;
-    return want > humans;
+    return want > humans || G.cfg.kickersN > 1;   // 同時キックでも自動キックがCPU名義になる場合あり
   },
   startRound() {
     this.clearTimers();
-    if (this.roundNo >= this.order.length) { this.finish(); return; }
-    const slot = this.order[this.roundNo];
-    let kicker, humansForKeep;
+    this.cpuDivesArmed = false;
+    if (this.roundNo >= this.order.length) { this.finish(false); return; }
+    const entry = this.order[this.roundNo];
+    let kickers;
     if (G.mode === "solo") {
-      kicker = slot.cpu ? { cpu: true, name: "CPU" } : { mid: 0, name: "あなた" };
-      humansForKeep = slot.cpu ? [{ mid: 0, name: "あなた" }] : [];
+      kickers = entry.ks.map((s) => (s.cpu ? { cpu: true, name: "CPU" } : { mid: 0, name: "あなた" }));
     } else {
-      const m = G.members.find((x) => x.mid === slot.mid);
-      if (!m) { this.roundNo++; this.startRound(); return; }   // 抜けた人はスキップ
-      kicker = { mid: m.mid, name: m.name };
-      humansForKeep = G.members.filter((x) => x.mid !== m.mid);
+      kickers = entry.ks
+        .map((s) => {
+          if (s.cpu) return { cpu: true, name: "CPU" };
+          const m = G.members.find((x) => x.mid === s.mid);
+          return m ? { mid: m.mid, name: m.name } : null;   // 抜けた人はスキップ
+        })
+        .filter(Boolean);
+      if (!kickers.length) { this.roundNo++; this.startRound(); return; }
     }
-    const want = G.mode === "solo"
-      ? G.cfg.keepers
-      : (G.cfg.keepers === 0 ? clamp(G.members.length - 1, 1, MAX_KEEPERS) : G.cfg.keepers);
-    const keepers = [];
+    // キーパー候補(チーム戦は蹴ってるチーム以外/みんなでは蹴ってない人)
+    let cands;
+    if (G.mode === "solo") {
+      cands = kickers.some((k) => !k.cpu) ? [] : [{ mid: 0, name: "あなた" }];
+    } else {
+      const kickMids = new Set(
+        entry.team != null && G.teams ? G.teams[entry.team].mids : kickers.filter((k) => !k.cpu).map((k) => k.mid)
+      );
+      cands = G.members.filter((m) => G.activeMids.has(m.mid) && !kickMids.has(m.mid));
+    }
+    const want = G.cfg.keepers === 0 ? clamp(cands.length || 1, 1, MAX_KEEPERS) : G.cfg.keepers;
     const n = clamp(want, 1, MAX_KEEPERS);
     const xs = slotXs(n);
+    const keepers = [];
     for (let i = 0; i < n; i++) {
-      const h = humansForKeep[i];
+      const h = cands[i];
       keepers.push(h
         ? { mid: h.mid, name: h.name, cpu: false, x: xs[i] }
         : { cpu: true, name: "CPU" + (i + 1), x: xs[i] + (Math.random() - 0.5) * 0.5 });
     }
     this.roundNo++;
-    net.send({ t: "round", no: this.roundNo, total: this.order.length, kicker, keepers, setDur: SET_DUR });
-    this.after(SET_DUR * 1000, () => {
+    net.send({
+      t: "round", no: this.roundNo, total: this.order.length,
+      kickers, keepers, setDur: G.cfg.setDur, kickLimit: G.cfg.kickLimit,
+      team: entry.team != null ? entry.team : null,
+    });
+    this.after(G.cfg.setDur * 1000, () => {
       net.send({ t: "aim" });
       // CPUキッカーはすこし考えてから蹴る
-      if (kicker.cpu) this.after(1200 + Math.random() * 1600, () => this.cpuKick());
-      // キッカーがずっと蹴らなければ自動キック
-      this.after(KICK_TIMEOUT, () => { if (!G.kick) net.send({ t: "kick", mid: -1, tx: (Math.random() - 0.5) * 3, ty: 0.7, pow: 0.5 }); });
+      kickers.forEach((k, slot) => {
+        if (k.cpu) this.after(1200 + Math.random() * 1600, () => this.cpuKick(slot));
+      });
+      // 制限時間で自動キック
+      this.after(G.cfg.kickLimit * 1000, () => {
+        kickers.forEach((k, slot) => {
+          if (!G.kicks[slot]) net.send({ t: "kick", mid: -1, slot, tx: (Math.random() - 0.5) * 3, ty: 0.7, pow: 0.5, crv: 0 });
+        });
+      });
     });
   },
-  cpuKick() {
-    if (G.kick) return;
-    const wild = Math.random() < 0.1;
+  cpuKick(slot) {
+    if (G.kicks[slot]) return;
+    const lv = CPU_LVS[G.cfg.cpuLevel] || CPU_LVS[1];
+    const wild = Math.random() < lv.wild;
     const tx = (Math.random() < 0.5 ? -1 : 1) * (wild ? 3.9 + Math.random() * 0.8 : 1.6 + Math.random() * 1.9);
     const ty = Math.random() < 0.45 ? 0.2 + Math.random() * 0.5 : 1.2 + Math.random() * (wild ? 1.6 : 0.9);
     const crv = Math.random() < 0.4 ? (Math.random() - 0.5) * 2.4 : 0;   // ときどきカーブも蹴る
-    net.send({ t: "kick", mid: -1, tx, ty, pow: 0.55 + Math.random() * 0.4, crv });
+    net.send({ t: "kick", mid: -1, slot, tx, ty, pow: 0.55 + Math.random() * 0.4, crv });
   },
   onKick() {               // kick配信直後にホストが呼ぶ
-    this.kickAt = performance.now() + RUNUP * 1000;
-    // CPUキーパーの飛びこみ
-    G.keepers.forEach((k, i) => {
-      if (!k.cpu) return;
-      const delay = RUNUP * 1000 + 100 + Math.random() * 280;
-      this.after(delay, () => {
-        if (k.dive) return;
-        // 判定がピンポイントになったぶん、当たりを読めた時の精度は少し上げる
-        const guess = Math.random() < 0.68;
-        const gx = guess ? G.kick.tx + (Math.random() - 0.5) * 0.7 : (Math.random() - 0.5) * 6;
-        const gy = guess ? G.kick.ty + (Math.random() - 0.5) * 0.5 : Math.random() * 2;
-        const dx = gx - k.x, dy = gy - TORSO_Y;
-        const L = Math.hypot(dx, dy) || 1;
-        net.send({ t: "dive", ki: i, dx: dx / L, dy: clamp(dy / L, -0.25, 1), len: clamp(L, 0.6, DIVE_MAX) });
+    // CPUキーパーの飛びこみ(最初のキックで予約)
+    if (!this.cpuDivesArmed) {
+      this.cpuDivesArmed = true;
+      const lv = CPU_LVS[G.cfg.cpuLevel] || CPU_LVS[1];
+      G.keepers.forEach((k, i) => {
+        if (!k.cpu) return;
+        const delay = RUNUP * 1000 + 100 + Math.random() * 280;
+        this.after(delay, () => {
+          if (k.dive) return;
+          const targets = G.kicks.filter(Boolean);
+          if (!targets.length) return;
+          const tgt = targets[Math.floor(Math.random() * targets.length)];
+          const guess = Math.random() < lv.guess;
+          const gx = guess ? tgt.tx + (Math.random() - 0.5) * lv.dive : (Math.random() - 0.5) * 6;
+          const gy = guess ? tgt.ty + (Math.random() - 0.5) * lv.dive * 0.7 : Math.random() * 2;
+          const dx = gx - k.x, dy = gy - TORSO_Y;
+          const L = Math.hypot(dx, dy) || 1;
+          net.send({ t: "dive", ki: i, dx: dx / L, dy: clamp(dy / L, -0.25, 1), len: clamp(L, 0.6, DIVE_MAX) });
+        });
       });
-    });
-    // 判定はボール到着後に確定(とんちゅうの飛びこみも入れるため)
-    const T = flightT(G.kick.pow);
-    this.after(RUNUP * 1000 + T * 1000 + 200, () => {
-      const sim = simulate(G.kick, G.keepers);
-      const scores = { ...G.scores };
-      if (sim.res === "goal") scores[G.kicker.cpu ? "CPU" : G.kicker.name] = (scores[G.kicker.cpu ? "CPU" : G.kicker.name] || 0) + 1;
-      if (sim.res === "save") {
-        const k = G.keepers[sim.by];
-        const key = k.cpu ? "CPU" : (G.mode === "solo" ? "あなた" : k.name);
-        scores[key] = (scores[key] || 0) + 1;
-      }
-      net.send({ t: "verdict", res: sim.res, by: sim.by, scores });
-      this.after(3000, () => this.startRound());
-    });
+    }
+    // 全ボールが出そろったら、いちばん遅い到着後に判定
+    if (G.kicks.length === G.kickers.length && G.kicks.every(Boolean)) {
+      const lastArrive = Math.max(...G.kicks.map((c) => c.launchAt + flightT(c.pow) * 1000));
+      this.after(Math.max(0, lastArrive - performance.now()) + 250, () => {
+        const sim = simulateAll(G.kicks, G.keepers);
+        const scores = { ...G.scores };
+        sim.results.forEach((r, slot) => {
+          if (!r) return;
+          if (r.res === "goal") {
+            const kk = G.kickers[slot];
+            const key = kk.cpu ? "CPU" : kk.name;
+            scores[key] = (scores[key] || 0) + 1;
+          }
+          if (r.res === "save") {
+            const kp = G.keepers[r.by];
+            const key = kp.cpu ? "CPU" : (G.mode === "solo" ? "あなた" : kp.name);
+            scores[key] = (scores[key] || 0) + 1;
+          }
+        });
+        net.send({ t: "verdict", results: sim.results.map((r) => r && { res: r.res, by: r.by }), scores });
+        this.after(3000, () => this.startRound());
+      });
+    }
   },
-  finish() {
+  // 同点ならサドンデス用の追加ラウンドを作る(force=trueは途中終了)
+  finish(force) {
+    if (!force && G.cfg.sudden && this.suddenN < 6) {
+      const extra = this.suddenChunks();
+      if (extra && extra.length) {
+        this.suddenN++;
+        this.order.push(...extra);
+        net.send({ t: "sudden" });
+        this.after(1800, () => this.startRound());
+        return;
+      }
+    }
     net.send({ t: "final", scores: G.scores });
+  },
+  suddenChunks() {
+    const kn = clamp(G.cfg.kickersN, 1, MAX_BALLS);
+    if (G.mode === "solo") {
+      if ((G.scores["あなた"] || 0) !== (G.scores["CPU"] || 0)) return null;
+      return this.buildCycleChunks();
+    }
+    if (G.teams) {
+      const totals = G.teams.map((t) => t.mids.reduce((s, mid) => {
+        const m = G.members.find((x) => x.mid === mid);
+        return s + (m ? (G.scores[m.name] || 0) : 0);
+      }, 0));
+      const top = Math.max(...totals);
+      const tied = G.teams.map((t, ti) => ti).filter((ti) => totals[ti] === top);
+      if (tied.length < 2) return null;
+      const chunks = [];
+      for (const ti of tied) {
+        const mids = G.teams[ti].mids.filter((mid) => G.activeMids.has(mid) && G.members.some((m) => m.mid === mid));
+        for (let i = 0; i < mids.length; i += kn) chunks.push({ ks: mids.slice(i, i + kn).map((mid) => ({ mid })), team: ti });
+      }
+      return chunks;
+    }
+    const active = G.members.filter((m) => G.activeMids.has(m.mid));
+    const top = Math.max(...active.map((m) => G.scores[m.name] || 0), 0);
+    const tied = active.filter((m) => (G.scores[m.name] || 0) === top);
+    if (tied.length < 2) return null;
+    const chunks = [];
+    for (let i = 0; i < tied.length; i += kn) chunks.push({ ks: tied.slice(i, i + kn).map((m) => ({ mid: m.mid })), team: null });
+    return chunks;
+  },
+  // ゲーム中⚙: 1周ついか
+  addCycle() {
+    this.order.push(...this.buildCycleChunks());
+  },
+  // ゲーム中⚙: 待機中メンバーを次のラウンドから参加させる
+  admit(mid) {
+    const m = G.members.find((x) => x.mid === mid);
+    if (!m || !G.activeMids || G.activeMids.has(mid)) return;
+    let team = null;
+    if (G.teams) {
+      let best = 0;
+      G.teams.forEach((t, ti) => { if (t.mids.length < G.teams[best].mids.length) best = ti; });
+      team = best;
+    }
+    this.order.push({ ks: [{ mid }], team });
+    // ※midは中継時に送信者のmidで上書きされるので、参加者は who で送る
+    net.send({ t: "joined", who: mid, name: m.name, team, scores: G.scores });
   },
 };
 
@@ -618,42 +804,65 @@ function handleMsg(msg) {
       break;
     case "start":
       G.scores = msg.scores;
+      G.teams = msg.teams || null;
+      G.activeMids = new Set(msg.active || []);
       showMatch();
       break;
     case "round": startRoundView(msg); break;
     case "aim": startAimView(); break;
     case "pos": {
-      // 蹴る瞬間(kick受信)までは自由に動ける
+      // 最初のキックが飛ぶ瞬間までは自由に動ける
       const k = G.keepers.find((x) => !x.cpu && x.mid === msg.mid);
-      if (k && (G.phase === "set" || (G.phase === "aim" && !G.kick))) k.x = clamp(msg.x, -KEEPER_X_MAX, KEEPER_X_MAX);
+      if (k && (G.phase === "set" || G.phase === "aim")) k.x = clamp(msg.x, -KEEPER_X_MAX, KEEPER_X_MAX);
       break;
     }
     case "kick": {
-      if (G.kick) break;
-      G.kick = { tx: msg.tx, ty: msg.ty, pow: msg.pow, crv: msg.crv || 0, launchAt: performance.now() + RUNUP * 1000 };
-      // 先に飛んじゃった人の飛びこみ時刻を発射基準に直す
-      for (const k of G.keepers) {
-        if (k.dive && k.dive.t == null) k.dive.t = clamp((k.diveAtMs - G.kick.launchAt) / 1000, -6, 0);
-      }
+      const slot = msg.slot | 0;
+      if (!G.kickers[slot] || G.kicks[slot]) break;
+      G.kicks[slot] = {
+        sx: ballSx(slot, G.kickers.length),
+        tx: msg.tx, ty: msg.ty, pow: msg.pow, crv: msg.crv || 0,
+        launchAt: performance.now() + RUNUP * 1000,
+      };
       G.simCache = null;
-      G.phase = "fly";
-      setPhaseMsg("");
-      setHint(myKeeper() && !myKeeper().dive ? "きた!スワイプで飛びこめ!" : "");
+      if (G.phase === "aim") {
+        G.phase = "fly";
+        setPhaseMsg("");
+        setHint(myKeeper() && !myKeeper().dive ? "きた!スワイプで飛びこめ!" : "");
+      }
       if (isDirector()) host.onKick();
       break;
     }
     case "dive": {
       const k = msg.ki != null ? G.keepers[msg.ki] : G.keepers.find((x) => !x.cpu && x.mid === msg.mid);
       if (!k || k.dive) break;
-      k.diveAtMs = performance.now();
-      const t = G.kick ? (k.diveAtMs - G.kick.launchAt) / 1000 : null;   // 発射前はキック時に確定
       // どんなに強くてもゴールの外へは飛び出さない(距離をつめる)
       const XB = GOAL_W / 2 - 0.25;
       let len = msg.len;
       if (msg.dx > 0.01) len = Math.min(len, (XB - k.x) / msg.dx);
       else if (msg.dx < -0.01) len = Math.min(len, (k.x + XB) / -msg.dx);
-      k.dive = { dx: msg.dx, dy: msg.dy, len: Math.max(0.2, len), t };
+      k.dive = { dx: msg.dx, dy: msg.dy, len: Math.max(0.2, len), atMs: performance.now() };
       G.simCache = null;
+      break;
+    }
+    case "joined": {
+      if (G.activeMids) G.activeMids.add(msg.who);
+      if (msg.team != null && G.teams && G.teams[msg.team] && !G.teams[msg.team].mids.includes(msg.who)) {
+        G.teams[msg.team].mids.push(msg.who);
+      }
+      if (msg.scores) G.scores = { ...msg.scores, ...G.scores };
+      if (G.scores[msg.name] == null) G.scores[msg.name] = 0;
+      updateScoreStrip();
+      renderGamePanel();
+      if (msg.who === G.myMid) showMatch();   // 途中参加した本人は試合画面へ
+      break;
+    }
+    case "sudden": {
+      const b = $("bigBanner");
+      b.classList.remove("hidden", "goal", "save", "miss");
+      b.classList.add("goal");
+      b.innerHTML = `サドンデス!!<small>けっちゃくがつくまで延長だ!</small>`;
+      setTimeout(() => b.classList.add("hidden"), 1700);
       break;
     }
     case "verdict": showVerdict(msg); break;
@@ -668,47 +877,72 @@ function handleMsg(msg) {
 const isDirector = () => G.mode === "solo" || net.isHost;
 
 // ────────────────── ラウンドの表示側 ──────────────────
-function myKeeper() { return G.keepers.find((k) => !k.cpu && k.mid === G.myMid && G.mode !== "solo") || G.keepers.find((k) => !k.cpu && G.mode === "solo" && k.mine); }
+function myKeeper() {
+  return G.keepers.find((k) => !k.cpu && (G.mode === "solo" ? k.mine : k.mid === G.myMid));
+}
+function mySlot() {
+  return G.kickers.findIndex((k) => !k.cpu && (G.mode === "solo" ? k.mine : k.mid === G.myMid));
+}
 
 function startRoundView(msg) {
   G.phase = "set";
   G.round = msg.no; G.totalRounds = msg.total;
-  G.kicker = msg.kicker;
-  G.kick = null; G.simCache = null;
-  G.myDove = false; G.myKicked = false;
-  G.verdictShown = false;
+  G.roundKickLimit = msg.kickLimit || 12;
+  G.roundTeam = msg.team != null ? msg.team : null;
   clearAvatars();
+  G.kicks = msg.kickers.map(() => null);
+  G.simCache = null;
+  G.myDove = false; G.myKicked = false;
+  G.kickers = msg.kickers.map((k) => ({ ...k }));
   G.keepers = msg.keepers.map((k) => ({ ...k, dive: null }));
-  if (G.mode === "solo") for (const k of G.keepers) if (!k.cpu) k.mine = true;
+  if (G.mode === "solo") {
+    for (const k of G.keepers) if (!k.cpu) k.mine = true;
+    for (const k of G.kickers) if (!k.cpu) k.mine = true;
+  }
 
-  // アバター生成
+  // アバターとボール
+  const kn = G.kickers.length;
   G.keepers.forEach((k, i) => {
-    k.avatar = makeAvatar(k.cpu ? "🤖" + k.name : k.name, i + 1, true);
+    k.avatar = makeAvatar(k.cpu ? "🤖" + k.name : k.name, i + kn, true);
     k.avatar.position.set(k.x, 0, KEEPER_Z);
   });
   const mineK = myKeeper();
   if (mineK) mineK.avatar.userData.label.visible = false;   // 自分のラベルは目の前でデカいので消す
-  kickerAvatar = makeAvatar(G.kicker.cpu ? "🤖CPU" : G.kicker.name, 0, false);
-  kickerAvatar.position.set(1.4, 0, SPOT_Z + 1.6);
-  // 自分がキッカーのときは自分の名前ラベルを消す(目の前でデカくなるので)
-  if (!G.kicker.cpu && G.kicker.mid === G.myMid) kickerAvatar.userData.label.visible = false;
-  ball.position.set(0, BALL_R + 0.03, SPOT_Z);
+  G.kickers.forEach((k, i) => {
+    k.avatar = makeAvatar(k.cpu ? "🤖CPU" : k.name, i, false);
+    k.avatar.position.set(ballSx(i, kn) + 1.4, 0, SPOT_Z + 1.6);
+    if (!k.cpu && ((G.mode === "solo" && k.mine) || k.mid === G.myMid)) k.avatar.userData.label.visible = false;
+  });
+  balls.forEach((b, i) => {
+    const on = i < kn;
+    b.visible = on; ballShadows[i].visible = on;
+    if (on) {
+      b.position.set(ballSx(i, kn), BALL_R + 0.03, SPOT_Z);
+      b.rotation.x = 0;
+      ballShadows[i].position.set(ballSx(i, kn), 0.013, SPOT_Z);
+    }
+  });
 
   const meK = myKeeper();
-  const iAmKicker = !G.kicker.cpu && G.kicker.mid === G.myMid && (G.mode !== "solo" || !G.kicker.cpu);
+  const meSlot = mySlot();
+  const teamTag = G.roundTeam != null && G.teams && G.teams[G.roundTeam] ? `${G.teams[G.roundTeam].emoji} ` : "";
+  const names = G.kickers.map((k) => (k.cpu ? "CPU🤖" : k.name));
   $("roundLabel").textContent = `ラウンド ${G.round}/${G.totalRounds}`;
-  setPhaseMsg(iAmKicker ? "あなたがキッカー!⚽" : `キッカーは ${G.kicker.cpu ? "CPU🤖" : G.kicker.name} !`);
+  setPhaseMsg(meSlot >= 0
+    ? (names.length > 1 ? `${teamTag}あなたたちがキッカー!⚽` : "あなたがキッカー!⚽")
+    : `${teamTag}キッカーは ${names.join("・")} !`);
   setHint(meK ? "← 左右にドラッグで移動!(蹴る瞬間まで動けるよ) →" : "キーパーが位置についてるよ…");
   refreshViewBtn();
+  refreshGearBtn();
   // 配置カウントダウン
   const timerEl = $("setTimer");
-  timerEl.classList.remove("hidden");
+  timerEl.classList.remove("hidden", "kick");
   const end = performance.now() + msg.setDur * 1000;
   const tick = () => {
     const left = Math.max(0, (end - performance.now()) / 1000);
     timerEl.textContent = Math.ceil(left);
     if (left > 0 && G.phase === "set") requestAnimationFrame(tick);
-    else timerEl.classList.add("hidden");
+    else if (G.phase !== "aim") timerEl.classList.add("hidden");
   };
   tick();
   updateScoreStrip();
@@ -717,55 +951,110 @@ function startRoundView(msg) {
 function startAimView() {
   if (G.phase !== "set") return;
   G.phase = "aim";
-  $("setTimer").classList.add("hidden");
   const meK = myKeeper();
-  const iAmKicker = !G.kicker.cpu && G.kicker.mid === G.myMid;
-  setPhaseMsg(iAmKicker ? "スワイプでシュート!!" : `${G.kicker.cpu ? "CPU🤖" : G.kicker.name} がねらってる…`);
-  setHint(iAmKicker
+  const meSlot = mySlot();
+  setPhaseMsg(meSlot >= 0 ? "スワイプでシュート!!" : `${G.kickers.map((k) => (k.cpu ? "CPU🤖" : k.name)).join("・")} がねらってる…`);
+  setHint(meSlot >= 0
     ? "スワイプの向き=コース、長さ=つよさ!弧を描くとカーブ!"
     : meK ? "まだ左右に動ける!蹴った瞬間からスワイプで飛びこみ(1回だけ)" : "どうなる!?");
+  // キック制限時間のカウントダウン(黄色)
+  const timerEl = $("setTimer");
+  timerEl.classList.remove("hidden");
+  timerEl.classList.add("kick");
+  const end = performance.now() + G.roundKickLimit * 1000;
+  const tick = () => {
+    const pending = G.kickers.length && G.kicks.some((c, i) => !c && i < G.kickers.length);
+    const left = Math.max(0, (end - performance.now()) / 1000);
+    if ((G.phase !== "aim" && G.phase !== "fly") || !pending || left <= 0) {
+      timerEl.classList.add("hidden");
+      timerEl.classList.remove("kick");
+      return;
+    }
+    timerEl.textContent = "⚽" + Math.ceil(left);
+    requestAnimationFrame(tick);
+  };
+  tick();
 }
 
 function showVerdict(msg) {
   G.phase = "verdict";
   G.scores = msg.scores;
-  G.verdictShown = true;
   updateScoreStrip();
+  const rs = (msg.results || []).map((r, i) => r && { ...r, name: G.kickers[i] ? (G.kickers[i].cpu ? "CPU" : G.kickers[i].name) : "?" }).filter(Boolean);
+  const goals = rs.filter((r) => r.res === "goal").length;
+  const saves = rs.filter((r) => r.res === "save").length;
+  const posts = rs.filter((r) => r.res === "post").length;
   const b = $("bigBanner");
   b.classList.remove("hidden", "goal", "save", "miss");
-  if (msg.res === "goal") {
+  const RES_TXT = { goal: "GOAL", save: "SAVE", post: "ポスト", miss: "MISS" };
+  const detail = rs.length > 1 ? rs.map((r) => `${esc(r.name)}→${RES_TXT[r.res]}`).join(" / ") : "";
+  if (goals > 0 && saves === 0) {
     b.classList.add("goal");
-    b.innerHTML = `GOAL!!<small>${esc(G.kicker.cpu ? "CPU" : G.kicker.name)} が決めた!</small>`;
+    b.innerHTML = `GOAL!!${goals > 1 ? `×${goals}` : ""}<small>${detail || esc(rs[0].name) + " が決めた!"}</small>`;
     camShake = 0.25;
-  } else if (msg.res === "save") {
-    const k = G.keepers[msg.by];
+  } else if (saves > 0 && goals === 0) {
+    const byNames = [...new Set(rs.filter((r) => r.res === "save").map((r) => {
+      const k = G.keepers[r.by];
+      return k ? (k.cpu ? k.name : (G.mode === "solo" ? "あなた" : k.name)) : "キーパー";
+    }))];
     b.classList.add("save");
-    b.innerHTML = `SAVE!!<small>${esc(k ? (k.cpu ? k.name : (G.mode === "solo" ? "あなた" : k.name)) : "キーパー")} のスーパーセーブ!</small>`;
+    b.innerHTML = `SAVE!!${saves > 1 ? `×${saves}` : ""}<small>${detail || esc(byNames.join("・")) + " のスーパーセーブ!"}</small>`;
     camShake = 0.2;
-  } else if (msg.res === "post") {
+  } else if (goals > 0 && saves > 0) {
+    b.classList.add("goal");
+    b.innerHTML = `GOAL×${goals} / SAVE×${saves}<small>${detail}</small>`;
+    camShake = 0.22;
+  } else if (posts > 0) {
     b.classList.add("miss");
-    b.innerHTML = `ポスト!!<small>おしい!わくに当たった!</small>`;
+    b.innerHTML = `ポスト!!<small>${detail || "おしい!わくに当たった!"}</small>`;
   } else {
     b.classList.add("miss");
-    b.innerHTML = `MISS…<small>わくの外にとんでいった…</small>`;
+    b.innerHTML = `MISS…<small>${detail || "わくの外にとんでいった…"}</small>`;
   }
   setHint("");
   setTimeout(() => b.classList.add("hidden"), 2600);
 }
 
+// チームの合計点
+function teamTotals() {
+  if (!G.teams) return null;
+  return G.teams.map((t) => t.mids.reduce((s, mid) => {
+    const m = G.members.find((x) => x.mid === mid);
+    return s + (m ? (G.scores[m.name] || 0) : 0);
+  }, 0));
+}
+
 function showFinal(scores) {
   G.phase = "final";
-  const entries = Object.entries(scores).sort((a, b) => b[1] - a[1]);
-  const medals = ["🥇", "🥈", "🥉"];
+  G.scores = scores;
   const el = $("finalRanking");
   el.innerHTML = "";
-  entries.forEach(([name, pts], i) => {
-    const row = document.createElement("div");
-    row.className = "rank-row" + (i === 0 ? " first" : "");
-    row.innerHTML = `<span class="medal">${medals[i] || "🎖"}</span><span>${esc(name)}</span><span class="pts">${pts}てん</span>`;
-    el.appendChild(row);
-  });
+  const medals = ["🥇", "🥈", "🥉"];
+  if (G.teams) {
+    const totals = teamTotals();
+    const order = G.teams.map((t, ti) => ti).sort((a, b) => totals[b] - totals[a]);
+    order.forEach((ti, i) => {
+      const t = G.teams[ti];
+      const memberNames = t.mids.map((mid) => {
+        const m = G.members.find((x) => x.mid === mid);
+        return m ? `${m.name} ${scores[m.name] || 0}` : null;
+      }).filter(Boolean).join(" / ");
+      const row = document.createElement("div");
+      row.className = "rank-row" + (i === 0 ? " first" : "");
+      row.innerHTML = `<span class="medal">${medals[i] || "🎖"}</span><span>${t.emoji} ${esc(t.name)}<small class="rank-sub">${esc(memberNames)}</small></span><span class="pts">${totals[ti]}てん</span>`;
+      el.appendChild(row);
+    });
+  } else {
+    const entries = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+    entries.forEach(([name, pts], i) => {
+      const row = document.createElement("div");
+      row.className = "rank-row" + (i === 0 ? " first" : "");
+      row.innerHTML = `<span class="medal">${medals[i] || "🎖"}</span><span>${esc(name)}</span><span class="pts">${pts}てん</span>`;
+      el.appendChild(row);
+    });
+  }
   $("againBtn").classList.toggle("hidden", !isDirector());
+  $("gamePanel").classList.add("hidden");
   $("finalOverlay").classList.remove("hidden");
 }
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -775,9 +1064,20 @@ function setHint(s) { $("hintMsg").textContent = s; }
 function updateScoreStrip() {
   const el = $("scoreStrip");
   el.innerHTML = "";
+  if (G.teams) {
+    const totals = teamTotals();
+    G.teams.forEach((t, ti) => {
+      const c = document.createElement("span");
+      c.className = "score-chip team" + (G.roundTeam === ti ? " kicker" : "");
+      c.style.borderColor = TEAMS[ti % TEAMS.length].color;
+      c.textContent = `${t.emoji} ${totals[ti]}`;
+      el.appendChild(c);
+    });
+  }
+  const kickerNames = new Set(G.kickers.map((k) => (k.cpu ? "CPU" : k.name)));
   for (const [name, pts] of Object.entries(G.scores)) {
     const c = document.createElement("span");
-    c.className = "score-chip" + (G.kicker && name === (G.kicker.cpu ? "CPU" : G.kicker.name) ? " kicker" : "");
+    c.className = "score-chip" + (kickerNames.has(name) ? " kicker" : "");
     c.textContent = `${name} ${pts}`;
     el.appendChild(c);
   }
@@ -788,14 +1088,18 @@ function showMatch() {
   $("lobby").classList.add("hidden");
   $("finalOverlay").classList.add("hidden");
   $("hud").classList.remove("hidden");
+  refreshGearBtn();
 }
 function backToLobby() {
   G.phase = "lobby";
   host.clearTimers();
   clearAvatars();
-  G.keepers = [];
+  G.keepers = []; G.kickers = []; G.kicks = [];
+  G.teams = null; G.activeMids = null;
+  balls.forEach((b, i) => { b.visible = false; ballShadows[i].visible = false; });
   $("hud").classList.add("hidden");
   $("finalOverlay").classList.add("hidden");
+  $("gamePanel").classList.add("hidden");
   $("lobby").classList.remove("hidden");
 }
 
@@ -860,16 +1164,19 @@ function swipeCurve(minDim) {
   return clamp((best / minDim) * 8, -2.4, 2.4);
 }
 
-const canMoveKeeper = () => G.phase === "set" || (G.phase === "aim" && !G.kick);
+const canMoveKeeper = () => G.phase === "set" || (G.phase === "aim" && !G.kicks.some(Boolean));
+const canKick = () => {
+  const s = mySlot();
+  return s >= 0 && !G.kicks[s] && !G.myKicked && (G.phase === "aim" || G.phase === "fly");
+};
 
 layer.addEventListener("pointerdown", (e) => {
   if (G.phase === "lobby" || G.phase === "final") return;
   const meK = myKeeper();
-  const iAmKicker = G.kicker && !G.kicker.cpu && G.kicker.mid === G.myMid;
   ptr.down = true;
   ptr.x0 = e.clientX; ptr.y0 = e.clientY;
-  if (iAmKicker && G.phase === "aim" && !G.myKicked) ptr.role = "kick";
-  else if (meK && G.phase === "fly" && G.kick && !G.myDove) ptr.role = "dive";
+  if (canKick()) ptr.role = "kick";
+  else if (meK && G.phase === "fly" && !G.myDove) ptr.role = "dive";
   else if (meK && canMoveKeeper()) { ptr.role = "move"; ptr.keeperX0 = meK.x; }
   else ptr.role = null;
   if (ptr.role === "kick" || ptr.role === "dive") {
@@ -907,14 +1214,14 @@ layer.addEventListener("pointerup", (e) => {
   const minDim = Math.min(innerWidth, innerHeight);
   if (len < 24) return;                                 // タップは無視
 
-  if (role === "kick" && G.phase === "aim" && !G.kick && !G.myKicked) {
+  if (role === "kick" && canKick()) {
     // キッカー: スワイプ→シュート(描いた弧でカーブ)
     G.myKicked = true;
     const tx = (dx / minDim) * 8;
     const ty = clamp((-dy / minDim) * 4.2, 0.05, 4.5);
     const pow = clamp(len / (0.6 * minDim), 0.3, 1);
-    net.send({ t: "kick", tx, ty, pow, crv: swipeCurve(minDim) });
-  } else if (role === "dive" && G.kick && !G.myDove) {
+    net.send({ t: "kick", slot: mySlot(), tx, ty, pow, crv: swipeCurve(minDim) });
+  } else if (role === "dive" && !G.myDove && G.kicks.some(Boolean)) {
     // キーパー: スワイプ→飛びこみ(画面右=世界の-x)。フルスワイプでゴール端から端まで
     G.myDove = true;
     const wx = -dx / len, wy = clamp(-dy / len, -0.25, 1);
@@ -925,24 +1232,21 @@ layer.addEventListener("pointerup", (e) => {
 });
 
 // ────────────────── メインループ(見た目のアニメ) ──────────────────
-const clock = new THREE.Clock();
 function animate() {
   requestAnimationFrame(animate);
   const now = performance.now();
 
   if (G.phase !== "lobby") {
+    const sim = getSim();
     // キーパーの位置/飛びこみ
-    const sim = G.kick ? getSim() : null;
-    const tFly = G.kick ? (now - G.kick.launchAt) / 1000 : -99;
     G.keepers.forEach((k, i) => {
       if (!k.avatar) return;
       let pose = { x: k.x, y: 0, rotZ: 0 };
       if (k.dive) {
-        // アニメは受信時刻ベース(蹴る前に飛んでもちゃんと飛ぶ)。判定と同じdivePoseを使う
-        let p = clamp((now - k.diveAtMs) / 1000 / DIVE_DUR, 0, 1);
+        let p = clamp((now - k.dive.atMs) / 1000 / DIVE_DUR, 0, 1);
         const frozenAt = sim ? sim.frozen[i] : Infinity;
-        if (frozenAt !== Infinity && k.dive.t != null) {
-          p = Math.min(p, clamp((frozenAt - k.dive.t) / DIVE_DUR, 0, 1));  // ぶつかった所で止まる
+        if (frozenAt !== Infinity) {
+          p = Math.min(p, clamp((frozenAt - k.dive.atMs) / 1000 / DIVE_DUR, 0, 1));  // ぶつかった所で止まる
         }
         pose = divePose(k.x, k.dive, p);
       }
@@ -950,50 +1254,64 @@ function animate() {
       k.avatar.rotation.z = pose.rotZ;
     });
 
-    // キッカーの助走
-    if (kickerAvatar) {
-      if (G.kick && tFly > -RUNUP && tFly < 0) {
-        const p = 1 + tFly / RUNUP;                     // 0→1
-        kickerAvatar.position.set(1.4 * (1 - p), Math.abs(Math.sin(p * Math.PI * 4)) * 0.09, (SPOT_Z + 1.6) - 1.3 * p);
-      } else if (G.kick && tFly >= 0) {
-        kickerAvatar.position.set(0, 0, SPOT_Z + 0.3);
-      }
-    }
-
-    // ボール
-    if (G.kick && tFly >= 0) {
-      const T = flightT(G.kick.pow);
-      const stopT = sim && sim.res === "save" ? sim.hitT : T;
-      const bp = ballPos(G.kick, Math.min(tFly, stopT));
-      let bx = bp.x, by = bp.y, bz = bp.z;
-      if (tFly > stopT) {
-        const over = Math.min(tFly - stopT, 0.9);
-        if (sim && sim.res === "save") {                // はじかれた!
-          bx += Math.sign(bx || 1) * over * 2.2;
-          bz += over * 5.5;
-          by = Math.max(BALL_R, by + over * 1.6 - over * over * 5);
-        } else if (sim && sim.res === "goal") {          // ネットにつきささる
-          bz = -Math.min(0.9, over * 4);
-          by = Math.max(BALL_R, by - over * 2.4);
-        } else {                                         // 枠外へ
-          bx += (G.kick.tx / (Math.abs(G.kick.tx) || 1)) * over * 3;
-          bz -= over * 7;
-          by = Math.max(BALL_R, by + over * 1.2 - over * over * 6);
+    // キッカーの助走とボール(スロットごと)
+    const kn = G.kickers.length;
+    G.kickers.forEach((k, i) => {
+      const kick = G.kicks[i];
+      const sx = ballSx(i, kn);
+      if (k.avatar) {
+        if (kick) {
+          const tFly = (now - kick.launchAt) / 1000;
+          if (tFly > -RUNUP && tFly < 0) {
+            const p = 1 + tFly / RUNUP;                 // 0→1
+            k.avatar.position.set(sx + 1.4 * (1 - p), Math.abs(Math.sin(p * Math.PI * 4)) * 0.09, (SPOT_Z + 1.6) - 1.3 * p);
+          } else if (tFly >= 0) {
+            k.avatar.position.set(sx, 0, SPOT_Z + 0.3);
+          }
+        } else {
+          k.avatar.position.set(sx + 1.4, 0, SPOT_Z + 1.6);
         }
       }
-      ball.position.set(bx, by, bz);
-      ball.rotation.x -= 0.28;
-    } else if (!G.kick) {
-      ball.position.set(0, BALL_R + 0.03, SPOT_Z);
-      ball.rotation.x = 0;
-    }
-    ballShadow.position.set(ball.position.x, 0.013, ball.position.z);
+      const ball = balls[i];
+      if (!ball || !ball.visible) return;
+      if (kick) {
+        const tFly = (now - kick.launchAt) / 1000;
+        if (tFly >= 0) {
+          const T = flightT(kick.pow);
+          const r = sim && sim.results ? sim.results[i] : null;
+          const stopT = r && r.res === "save" ? r.hitT : T;
+          const bp = ballPos(kick, Math.min(tFly, stopT));
+          let bx = bp.x, by = bp.y, bz = bp.z;
+          if (tFly > stopT) {
+            const over = Math.min(tFly - stopT, 0.9);
+            if (r && r.res === "save") {                 // はじかれた!
+              bx += Math.sign(bx || 1) * over * 2.2;
+              bz += over * 5.5;
+              by = Math.max(BALL_R, by + over * 1.6 - over * over * 5);
+            } else if (r && r.res === "goal") {          // ネットにつきささる
+              bz = -Math.min(0.9, over * 4);
+              by = Math.max(BALL_R, by - over * 2.4);
+            } else {                                     // 枠外へ
+              bx += (kick.tx / (Math.abs(kick.tx) || 1)) * over * 3;
+              bz -= over * 7;
+              by = Math.max(BALL_R, by + over * 1.2 - over * over * 6);
+            }
+          }
+          ball.position.set(bx, by, bz);
+          ball.rotation.x -= 0.28;
+        } else {
+          ball.position.set(sx, BALL_R + 0.03, SPOT_Z);
+        }
+      } else {
+        ball.position.set(sx, BALL_R + 0.03, SPOT_Z);
+        ball.rotation.x = 0;
+      }
+      ballShadows[i].position.set(ball.position.x, 0.013, ball.position.z);
+    });
   }
   drawSwipeFx(now);
   renderer.render(scene, G.phase !== "lobby" ? updateCamera() : camera);
 }
-resize();
-animate();
 
 // ────────────────── ロビーUI ──────────────────
 function chipRow(id, onPick) {
@@ -1009,6 +1327,61 @@ chipRow("soloKeepers", (v) => { G.cfg.keepers = v; });
 chipRow("soloRounds", (v) => { G.cfg.rounds = v; });
 chipRow("roomKeepers", (v) => { G.cfg.keepers = v; });
 chipRow("roomCycles", (v) => { G.cfg.cycles = v; });
+chipRow("advKickers", (v) => { G.cfg.kickersN = v; });
+chipRow("advSetDur", (v) => { G.cfg.setDur = v; });
+chipRow("advKickLimit", (v) => { G.cfg.kickLimit = v; });
+chipRow("advCpu", (v) => { G.cfg.cpuLevel = v; });
+chipRow("advSudden", (v) => { G.cfg.sudden = !!v; });
+chipRow("roomMode", (v) => {
+  G.cfg.teamMode = !!v;
+  $("teamAssign").classList.toggle("hidden", !v);
+  renderTeamAssign();
+});
+
+// チーム分け(ホストがロビーでタップして振り分け)
+const teamOf = new Map();   // mid -> 0..3 | undefined
+function renderTeamAssign() {
+  const box = $("teamList");
+  if (!box) return;
+  if (!net.isHost || !G.cfg.teamMode) { box.innerHTML = ""; return; }
+  box.innerHTML = "";
+  for (const m of G.members) {
+    const idx = teamOf.get(m.mid);
+    const b = document.createElement("button");
+    b.className = "chip team-pick" + (idx != null ? " t" + idx : "");
+    b.textContent = (idx != null ? TEAMS[idx].emoji + " " : "❔ ") + m.name;
+    b.onclick = () => {
+      const cur = teamOf.get(m.mid);
+      const next = cur == null ? 0 : cur + 1;
+      if (next >= 4) teamOf.delete(m.mid); else teamOf.set(m.mid, next);
+      renderTeamAssign();
+    };
+    box.appendChild(b);
+  }
+}
+// スタート時にチーム構成を確定(未割り当ては小さいチームへ、1チーム以下なら半分こ)
+function buildTeams() {
+  const buckets = [[], [], [], []];
+  const unassigned = [];
+  for (const m of G.members) {
+    const idx = teamOf.get(m.mid);
+    if (idx != null) buckets[idx].push(m.mid); else unassigned.push(m.mid);
+  }
+  if (buckets.filter((b) => b.length).length < 2) {
+    // ふり分けなし → 前後半分こ
+    const mids = G.members.map((m) => m.mid);
+    return [
+      { ...TEAMS[0], mids: mids.slice(0, Math.ceil(mids.length / 2)) },
+      { ...TEAMS[1], mids: mids.slice(Math.ceil(mids.length / 2)) },
+    ].map((t) => ({ emoji: t.emoji, name: t.name, mids: t.mids }));
+  }
+  for (const mid of unassigned) {
+    let best = -1;
+    buckets.forEach((b, i) => { if (b.length && (best === -1 || b.length < buckets[best].length)) best = i; });
+    buckets[best].push(mid);
+  }
+  return buckets.map((mids, i) => ({ emoji: TEAMS[i].emoji, name: TEAMS[i].name, mids })).filter((t) => t.mids.length);
+}
 
 $("modeSolo").onclick = () => setMode("solo");
 $("modeRoom").onclick = () => setMode("room");
@@ -1027,7 +1400,7 @@ $("soloStart").onclick = () => {
   G.mode = "solo";
   G.myMid = 0;
   G.members = [{ mid: 0, name: "あなた" }];
-  host.startMatch();
+  host.startMatch(null);
 };
 
 $("nameInput").value = store.name;
@@ -1047,7 +1420,7 @@ $("roomStart").onclick = () => {
   if (!net.isHost) return;
   if (G.members.length < 2) { setRoomStatus("2人以上そろってからスタートしてね!", "err"); return; }
   G.mode = "room";
-  host.startMatch();
+  host.startMatch(G.cfg.teamMode ? buildTeams() : null);
 };
 
 // 視点切りかえ(キーパーのときだけ表示)
@@ -1061,11 +1434,64 @@ $("viewBtn").onclick = () => {
   refreshViewBtn();
 };
 
+// ゲーム中の⚙(ホスト/ソロだけ): 途中終了・1周追加・途中参加
+function refreshGearBtn() {
+  $("gearBtn").classList.toggle("hidden", !(isDirector() && G.phase !== "lobby"));
+}
+function renderGamePanel() {
+  if ($("gamePanel").classList.contains("hidden")) return;
+  $("gpInfo").textContent = `ラウンド ${G.round}/${G.totalRounds}(のこり ${Math.max(0, G.totalRounds - G.round)})`;
+  const box = $("gpWaiting");
+  box.innerHTML = "";
+  if (G.mode === "room" && net.isHost && G.activeMids) {
+    const waiting = G.members.filter((m) => !G.activeMids.has(m.mid));
+    if (waiting.length) {
+      const label = document.createElement("div");
+      label.className = "gp-label";
+      label.textContent = "待機中のメンバー(次のラウンドから参加できるよ)";
+      box.appendChild(label);
+      for (const m of waiting) {
+        const row = document.createElement("div");
+        row.className = "gp-wait-row";
+        const name = document.createElement("span");
+        name.textContent = "🙂 " + m.name;
+        const btn = document.createElement("button");
+        btn.className = "secondary-btn gp-admit";
+        btn.textContent = "参加させる";
+        btn.onclick = () => { host.admit(m.mid); };
+        row.append(name, btn);
+        box.appendChild(row);
+      }
+    } else {
+      const label = document.createElement("div");
+      label.className = "gp-label";
+      label.textContent = "待機中のメンバーはいないよ";
+      box.appendChild(label);
+    }
+  }
+}
+$("gearBtn").onclick = () => {
+  $("gamePanel").classList.remove("hidden");
+  renderGamePanel();
+};
+$("gpClose").onclick = () => $("gamePanel").classList.add("hidden");
+$("gpAddCycle").onclick = () => {
+  if (!isDirector()) return;
+  host.addCycle();
+  $("gpInfo").textContent = `1周ついかしたよ!(ぜんぶで ${host.order.length} ラウンド)`;
+};
+$("gpEnd").onclick = () => {
+  if (!isDirector()) return;
+  $("gamePanel").classList.add("hidden");
+  host.clearTimers();
+  host.finish(true);
+};
+
 $("quitBtn").onclick = () => {
   if (isDirector() && G.mode === "room") net.send({ t: "abort" });
   backToLobby();
 };
-$("againBtn").onclick = () => { if (isDirector()) host.startMatch(); };
+$("againBtn").onclick = () => { if (isDirector()) host.startMatch(G.teams); };
 $("lobbyBtn").onclick = () => {
   if (isDirector() && G.mode === "room" && G.phase !== "lobby") net.send({ t: "abort" });
   backToLobby();
@@ -1073,4 +1499,7 @@ $("lobbyBtn").onclick = () => {
 addEventListener("beforeunload", () => destroyPeer());
 
 // デバッグ用(コンソールから状態確認できるように)
-window.__npk = { G, handleMsg, host, net, simulate, ballPos, ballHitsBody, divePose, slotXs, swipeFx, getCamView: () => camView };
+window.__npk = { G, handleMsg, host, net, simulateAll, ballPos, ballHitsBody, divePose, slotXs, ballSx, swipeFx, getCamView: () => camView };
+
+resize();
+animate();

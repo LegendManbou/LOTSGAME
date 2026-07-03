@@ -21,6 +21,7 @@
       <button id="quitBtn" class="hud-btn">← やめる</button>
       <div id="roundLabel" class="round-label"></div>
       <div class="hud-right">
+        <button id="gearBtn" class="hud-btn hidden">⚙</button>
         <button id="viewBtn" class="hud-btn hidden">🎥 視点:大</button>
         <div id="scoreStrip" class="score-strip"></div>
       </div>
@@ -72,6 +73,7 @@
           <button class="chip" data-v="3">3本</button>
           <button class="chip active" data-v="5">5本</button>
           <button class="chip" data-v="7">7本</button>
+          <button class="chip" data-v="10">10本</button>
         </div>
       </div>
       <button id="soloStart" class="primary-btn">⚽ キックオフ!</button>
@@ -96,6 +98,17 @@
 
       <div id="hostSettings" class="hidden">
         <div class="panel-row">
+          <span class="panel-label">たいせん形式</span>
+          <div class="chip-row" id="roomMode">
+            <button class="chip active" data-v="0">みんなで</button>
+            <button class="chip" data-v="1">チーム戦</button>
+          </div>
+        </div>
+        <div id="teamAssign" class="panel-row hidden">
+          <span class="panel-label">メンバーをタップでチーム分け(🔴→🔵→🟢→🟡→❔)</span>
+          <div id="teamList" class="member-list"></div>
+        </div>
+        <div class="panel-row">
           <span class="panel-label">キーパーの人数(足りない分はCPU・最大9人)</span>
           <div class="chip-row" id="roomKeepers">
             <button class="chip active" data-v="0">自動</button>
@@ -108,11 +121,12 @@
           </div>
         </div>
         <div class="panel-row">
-          <span class="panel-label">サイクル数(全員が1回ずつ蹴って1サイクル)</span>
+          <span class="panel-label">交代回数(全員が1回ずつ蹴って1周)</span>
           <div class="chip-row" id="roomCycles">
-            <button class="chip active" data-v="1">1</button>
-            <button class="chip" data-v="2">2</button>
-            <button class="chip" data-v="3">3</button>
+            <button class="chip active" data-v="1">1周</button>
+            <button class="chip" data-v="2">2周</button>
+            <button class="chip" data-v="3">3周</button>
+            <button class="chip" data-v="5">5周</button>
           </div>
         </div>
         <button id="roomStart" class="primary-btn">⚽ みんなでキックオフ!</button>
@@ -120,7 +134,67 @@
       <p id="guestWait" class="guest-wait hidden">ホストのスタートを待ってるよ…</p>
     </div>
 
+    <!-- こまかい設定(ソロ・部屋 共通) -->
+    <details class="panel adv-panel">
+      <summary>⚙ こまかいせってい</summary>
+      <div class="panel-row">
+        <span class="panel-label">同時に蹴る人数(ボールの数)</span>
+        <div class="chip-row" id="advKickers">
+          <button class="chip active" data-v="1">1人</button>
+          <button class="chip" data-v="2">2人</button>
+          <button class="chip" data-v="3">3人</button>
+        </div>
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">配置タイム(キーパーの準備時間)</span>
+        <div class="chip-row" id="advSetDur">
+          <button class="chip" data-v="3">3秒</button>
+          <button class="chip active" data-v="6">6秒</button>
+          <button class="chip" data-v="10">10秒</button>
+        </div>
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">キック制限時間(すぎると自動キック)</span>
+        <div class="chip-row" id="advKickLimit">
+          <button class="chip" data-v="8">8秒</button>
+          <button class="chip active" data-v="12">12秒</button>
+          <button class="chip" data-v="20">20秒</button>
+        </div>
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">CPUの強さ</span>
+        <div class="chip-row" id="advCpu">
+          <button class="chip" data-v="0">よわい</button>
+          <button class="chip active" data-v="1">ふつう</button>
+          <button class="chip" data-v="2">つよい</button>
+        </div>
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">サドンデス(同点なら決着まで延長)</span>
+        <div class="chip-row" id="advSudden">
+          <button class="chip active" data-v="0">なし</button>
+          <button class="chip" data-v="1">あり</button>
+        </div>
+      </div>
+    </details>
+
     <p class="credit">3Dグラフィック・ゲームシステムぜんぶオリジナル(LOTSGAME自作)<br>キッカー: 弧を描くスワイプでカーブシュート / キーパー: 蹴る瞬間まで左右に動ける→スワイプで飛びこみ(視点切りかえOK)</p>
+  </div>
+
+  <!-- ── ゲーム中の設定(ホスト/ソロ) ── -->
+  <div id="gamePanel" class="overlay hidden">
+    <div class="final-panel">
+      <h2>⚙ 試合のせってい</h2>
+      <div id="gpInfo" class="gp-info"></div>
+      <div class="btn-row">
+        <button id="gpAddCycle" class="secondary-btn">➕ 1周ついか</button>
+        <button id="gpEnd" class="secondary-btn">🏁 ここで終了</button>
+      </div>
+      <div id="gpWaiting"></div>
+      <div class="btn-row">
+        <button id="gpClose" class="primary-btn">とじる</button>
+      </div>
+    </div>
   </div>
 
   <!-- ── 最終リザルト ── -->
