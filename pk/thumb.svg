@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 250">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0a1c4d"/>
+      <stop offset="1" stop-color="#04102a"/>
+    </linearGradient>
+    <linearGradient id="grass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0d5c34"/>
+      <stop offset="1" stop-color="#0b4d2b"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.45" r="0.6">
+      <stop offset="0" stop-color="#4ffcff" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#4ffcff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="400" height="250" fill="url(#sky)"/>
+  <rect y="150" width="400" height="100" fill="url(#grass)"/>
+  <rect y="150" width="400" height="14" fill="#0d5c34"/>
+  <rect y="178" width="400" height="14" fill="#0d5c34"/>
+  <rect y="206" width="400" height="14" fill="#0d5c34"/>
+  <rect width="400" height="250" fill="url(#glow)"/>
+  <!-- ゴール -->
+  <g stroke="#eef6ff" stroke-width="6" fill="none" stroke-linecap="round">
+    <path d="M80 160 L80 60 L320 60 L320 160"/>
+  </g>
+  <g stroke="#9fb8ff" stroke-width="1.4" opacity="0.55">
+    <path d="M96 60 V158 M124 60 V158 M152 60 V158 M180 60 V158 M208 60 V158 M236 60 V158 M264 60 V158 M292 60 V158"/>
+    <path d="M82 84 H318 M82 108 H318 M82 132 H318"/>
+  </g>
+  <!-- キーパー(飛びこみ) -->
+  <g transform="translate(150 118) rotate(-38)">
+    <rect x="-13" y="-26" width="26" height="52" rx="13" fill="#ff6bd6"/>
+    <circle cx="0" cy="-38" r="11" fill="#ffdcb2"/>
+  </g>
+  <!-- ボール -->
+  <circle cx="252" cy="96" r="17" fill="#ffffff"/>
+  <circle cx="252" cy="96" r="17" fill="none" stroke="#c9d4ff" stroke-width="2"/>
+  <path d="M252 88 l7 5 -3 8 h-8 l-3 -8 z" fill="#233"/>
+  <!-- スピード線 -->
+  <g stroke="#4ffcff" stroke-width="4" stroke-linecap="round" opacity="0.85">
+    <path d="M300 120 L336 140"/>
+    <path d="M296 104 L344 118"/>
+    <path d="M298 88 L338 92"/>
+  </g>
+  <text x="200" y="228" text-anchor="middle" font-family="'M PLUS Rounded 1c',sans-serif" font-size="34" font-weight="900" font-style="italic" fill="#4ffcff" stroke="#04102a" stroke-width="1">NEON <tspan fill="#7dffa9">PK</tspan></text>
+</svg>

@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#04102a">
+  <title>NEON PK — LOTSGAMEの自作3D PKゲーム</title>
+  <meta name="description" content="ブラウザで遊べる3DのPK対決!キッカーvsキーパー、部屋を作ればみんなのスマホで同時対戦">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚽</text></svg>">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <canvas id="gl"></canvas>
+  <div id="touchLayer"></div>
+
+  <!-- ── ゲーム中HUD ── -->
+  <div id="hud" class="hidden">
+    <div class="hud-top">
+      <button id="quitBtn" class="hud-btn">← やめる</button>
+      <div id="roundLabel" class="round-label"></div>
+      <div id="scoreStrip" class="score-strip"></div>
+    </div>
+    <div id="phaseMsg" class="phase-msg"></div>
+    <div id="setTimer" class="set-timer hidden"></div>
+    <div id="bigBanner" class="big-banner hidden"></div>
+    <div id="hintMsg" class="hint-msg"></div>
+  </div>
+
+  <!-- ── ロビー ── -->
+  <div id="lobby" class="screen">
+    <header class="topbar">
+      <a class="back-btn" href="../">←</a>
+      <h1 class="game-logo">NEON<span>PK</span></h1>
+      <span class="spacer"></span>
+    </header>
+    <p class="sub">3DのPK対決⚽ キッカーはスワイプでシュート、キーパーはスワイプで飛びこめ!</p>
+
+    <div class="mode-row">
+      <button id="modeSolo" class="mode-card active">
+        <div class="mode-emoji">🤖</div>
+        <div class="mode-name">ひとりで</div>
+        <div class="mode-desc">CPUと交互にキッカー/キーパー対決</div>
+      </button>
+      <button id="modeRoom" class="mode-card">
+        <div class="mode-emoji">📶</div>
+        <div class="mode-name">部屋でみんなと</div>
+        <div class="mode-desc">4桁IDの部屋に集まって同時対戦</div>
+      </button>
+    </div>
+
+    <!-- ソロ設定 -->
+    <div id="soloPanel" class="panel">
+      <div class="panel-row">
+        <span class="panel-label">キーパーの人数</span>
+        <div class="chip-row" id="soloKeepers">
+          <button class="chip active" data-v="1">1人</button>
+          <button class="chip" data-v="2">2人</button>
+          <button class="chip" data-v="3">3人</button>
+          <button class="chip" data-v="4">4人</button>
+        </div>
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">なん本勝負(こうたい制)</span>
+        <div class="chip-row" id="soloRounds">
+          <button class="chip" data-v="3">3本</button>
+          <button class="chip active" data-v="5">5本</button>
+          <button class="chip" data-v="7">7本</button>
+        </div>
+      </div>
+      <button id="soloStart" class="primary-btn">⚽ キックオフ!</button>
+    </div>
+
+    <!-- 部屋設定 -->
+    <div id="roomPanel" class="panel hidden">
+      <div class="panel-row">
+        <span class="panel-label">なまえ</span>
+        <input id="nameInput" class="text-input" maxlength="12" placeholder="なまえを入れてね">
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">部屋ID(4桁)</span>
+        <input id="roomInput" class="text-input" inputmode="numeric" maxlength="4" placeholder="1234">
+      </div>
+      <div class="btn-row">
+        <button id="createRoomBtn" class="secondary-btn">🏠 部屋を作る</button>
+        <button id="joinRoomBtn" class="secondary-btn">🚪 部屋に入る</button>
+      </div>
+      <div id="roomStatus" class="room-status"></div>
+      <div id="memberList" class="member-list"></div>
+
+      <div id="hostSettings" class="hidden">
+        <div class="panel-row">
+          <span class="panel-label">キーパーの人数(足りない分はCPU)</span>
+          <div class="chip-row" id="roomKeepers">
+            <button class="chip active" data-v="0">自動</button>
+            <button class="chip" data-v="1">1人</button>
+            <button class="chip" data-v="2">2人</button>
+            <button class="chip" data-v="3">3人</button>
+            <button class="chip" data-v="4">4人</button>
+          </div>
+        </div>
+        <div class="panel-row">
+          <span class="panel-label">サイクル数(全員が1回ずつ蹴って1サイクル)</span>
+          <div class="chip-row" id="roomCycles">
+            <button class="chip active" data-v="1">1</button>
+            <button class="chip" data-v="2">2</button>
+            <button class="chip" data-v="3">3</button>
+          </div>
+        </div>
+        <button id="roomStart" class="primary-btn">⚽ みんなでキックオフ!</button>
+      </div>
+      <p id="guestWait" class="guest-wait hidden">ホストのスタートを待ってるよ…</p>
+    </div>
+
+    <p class="credit">3Dグラフィック・ゲームシステムぜんぶオリジナル(LOTSGAME自作)<br>キッカー: スワイプでシュート / キーパー: ドラッグで位置ぎめ→スワイプで飛びこみ</p>
+  </div>
+
+  <!-- ── 最終リザルト ── -->
+  <div id="finalOverlay" class="overlay hidden">
+    <div class="final-panel">
+      <h2 id="finalTitle">けっか はっぴょう!</h2>
+      <div id="finalRanking"></div>
+      <div class="btn-row">
+        <button id="againBtn" class="primary-btn">🔄 もういちど</button>
+        <button id="lobbyBtn" class="secondary-btn">🏠 ロビーへ</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script type="module" src="game.js"></script>
+</body>
+</html>
