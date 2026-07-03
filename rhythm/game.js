@@ -236,6 +236,52 @@ function buildSong(def) {
   return { def, events: ev, spb, duration: totalBeats * spb + 2 };
 }
 
+// ── 親指2本用のレーン再配置(EXPERT/MASTER) ──
+// ルール: レーン1・2=左親指 / 3・4=右親指。同時は左右1本ずつ最大2。交差禁止。
+// ロング中はその親指が使えない+交差になるレーンも禁止(例: 2番ロング中は1番NG)。
+// 間隔が短い連打は左右交互。置き場がないノーツだけ削除(ごく少数)。
+function thumbify(notes, P) {
+  notes.sort((a, b) => a.t - b.t || a.lane - b.lane);
+  const FAST = 0.14;                        // これ未満の間隔は左右交互を強制
+  const REUSE = Math.max(P.gap, 0.11);      // 同じレーンの再使用間隔
+  const sideOf = (l) => (l <= 1 ? 0 : 1);
+  // ロング中に押せるレーン(持ってる親指のレーンと、交差になるレーンを除く)
+  const HOLD_ALLOW = [[1, 2, 3], [2, 3], [0, 1], [0, 1, 2]];
+  const lastLaneT = [-9, -9, -9, -9];
+  const holds = [];                         // {lane, end}
+  let prevT = -9, prevSides = 0;            // 直前タイムスタンプとそのサイド(bit: 1=左 2=右)
+
+  for (let i = 0; i < notes.length; i++) {
+    const nt = notes[i];
+    for (let h = holds.length - 1; h >= 0; h--) if (holds[h].end <= nt.t + 0.001) holds.splice(h, 1);
+
+    const base = [0, 1, 2, 3].filter((l) => holds.every((h) => l !== h.lane && HOLD_ALLOW[h.lane].includes(l)));
+    const mate = i > 0 && Math.abs(notes[i - 1].t - nt.t) < 0.0001 ? notes[i - 1] : null;
+    const fastPrev = !mate && nt.t - prevT < FAST && (prevSides === 1 || prevSides === 2);
+    const filters = [
+      (l) => nt.t - lastLaneT[l] >= REUSE,                                  // レーン再使用
+      (l) => !fastPrev || sideOf(l) !== (prevSides === 1 ? 0 : 1),          // 高速は左右交互
+      (l) => !mate || sideOf(l) !== sideOf(mate.lane),                      // 同時は左右で
+    ];
+    // 置けない時は「再使用」だけゆるめる(左右交互・同時左右・交差は絶対条件)
+    let allowed = base.filter((l) => filters.every((f) => f(l)));
+    if (!allowed.length) allowed = base.filter((l) => filters[1](l) && filters[2](l));
+    if (!allowed.length) { notes.splice(i, 1); i--; continue; }
+
+    // 元のレーンに近い所を優先(メロディの形をなるべく残す)
+    let best = allowed[0];
+    for (const l of allowed) {
+      if (Math.abs(l - nt.lane) < Math.abs(best - nt.lane) ||
+          (Math.abs(l - nt.lane) === Math.abs(best - nt.lane) && lastLaneT[l] < lastLaneT[best])) best = l;
+    }
+    nt.lane = best;
+    lastLaneT[best] = nt.type === "hold" ? nt.t + nt.dur : nt.t;
+    if (nt.type === "hold") holds.push({ lane: best, end: nt.t + nt.dur });
+    if (Math.abs(nt.t - prevT) < 0.0001) prevSides |= sideOf(best) + 1;
+    else { prevT = nt.t; prevSides = sideOf(best) + 1; }
+  }
+}
+
 // 内蔵曲の譜面: メロディ+ドラムから難易度別に生成
 function chartFromSong(song, dif) {
   const { events, spb } = song;
@@ -334,6 +380,7 @@ function chartFromSong(song, dif) {
       const remove = new Set(removable.slice(0, removeCount));
       for (let i = notes.length - 1; i >= 0; i--) if (remove.has(i)) notes.splice(i, 1);
     }
+    thumbify(notes, P);   // 親指2本で押せる配置に直す(密度はそのまま)
   }
 
   if (dif === "god") {
