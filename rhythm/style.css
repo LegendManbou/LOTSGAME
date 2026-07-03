@@ -182,6 +182,43 @@ body::before {
 }
 .play-btn:active { transform: scale(.94); }
 
+/* ── GOD専用・デーモン曲 ── */
+.demon-card {
+  background: linear-gradient(135deg, rgba(58, 3, 10, .92), rgba(24, 1, 5, .95));
+  border: 1px solid rgba(255, 40, 60, .6);
+  animation: demonPulse 1.4s ease-in-out infinite;
+  position: relative;
+  overflow: hidden;
+}
+.demon-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120% 90% at 50% 110%, rgba(255, 60, 20, .28), transparent 60%);
+  pointer-events: none;
+}
+.demon-card .song-emoji {
+  background: linear-gradient(135deg, rgba(255, 30, 50, .55), rgba(110, 0, 12, .7));
+  box-shadow: 0 0 14px rgba(255, 30, 50, .55);
+  text-shadow: 0 0 12px #ff2030;
+}
+.demon-card .song-name {
+  color: #ff4d5e;
+  text-shadow: 0 0 10px rgba(255, 40, 60, .9), 0 0 26px rgba(255, 40, 60, .5);
+  letter-spacing: .04em;
+}
+.demon-card .song-meta { color: rgba(255, 150, 150, .8); }
+.demon-card .play-btn {
+  background: linear-gradient(135deg, #ff1e2e, #7a0010);
+  color: #fff;
+  box-shadow: 0 0 16px rgba(255, 30, 50, .6);
+  text-shadow: 0 0 6px rgba(0, 0, 0, .5);
+}
+@keyframes demonPulse {
+  0%, 100% { box-shadow: 0 0 12px rgba(255, 30, 50, .28), inset 0 0 18px rgba(255, 30, 50, .10); }
+  50%      { box-shadow: 0 0 26px rgba(255, 30, 50, .60), inset 0 0 30px rgba(255, 30, 50, .22); }
+}
+
 .analyze-status { text-align: center; color: var(--yellow); font-size: 12.5px; font-weight: 700; padding: 10px 16px; min-height: 20px; }
 .credit { text-align: center; color: var(--sub); font-size: 10.5px; line-height: 1.8; padding: 18px 20px 40px; }
 

@@ -165,7 +165,9 @@ const MINOR = [0, 2, 3, 5, 7, 8, 10];
 const SONG_DEFS = [
   { id: "starlight", name: "スターライト・ラン", emoji: "🌟", bpm: 126, seed: 11, bars: 34, root: 60, mode: "major", prog: [0, 5, 3, 4], wave: "triangle", lvBase: 3, desc: "キラキラ王道ポップ。はじめてはコレ!" },
   { id: "cyber", name: "サイバー・パレード", emoji: "🤖", bpm: 146, seed: 27, bars: 36, root: 57, mode: "minor", prog: [0, 5, 2, 6], wave: "square", lvBase: 6, desc: "ズンズン進むエレクトロ行進曲" },
-  { id: "overdrive", name: "ネオン・オーバードライブ", emoji: "⚡", bpm: 168, seed: 42, bars: 38, root: 52, mode: "minor", prog: [0, 6, 5, 4], wave: "sawtooth", lvBase: 9, desc: "最高速のクライマックス。腕が試される" },
+  { id: "overdrive", name: "ネオン・オーバードライブ", emoji: "⚡", bpm: 168, seed: 42, bars: 38, root: 52, mode: "minor", prog: [0, 6, 5, 4], wave: "sawtooth", lvBase: 9, lvOv: { god: 38 }, desc: "最高速のクライマックス。腕が試される" },
+  // GOD専用の裏ボス。lvBaseは譜面生成に使われるため9のまま、密度はdemonフラグで別枠制御
+  { id: "demon", name: "デーモンズ・インフェルノ", emoji: "👹", bpm: 205, seed: 666, bars: 40, root: 48, mode: "minor", prog: [0, 1, 6, 5], wave: "sawtooth", lvBase: 9, godOnly: true, demon: true, desc: "GOD専用。人間には押せない。逃げてもいい" },
 ];
 
 // 曲データ(音イベント列)を種から決定的に生成する
@@ -335,14 +337,16 @@ function chartFromSong(song, dif) {
   }
 
   if (dif === "god") {
+    const demon = !!song.def.demon;
     const godScale = clamp((song.def.lvBase - 3) / 6, 0, 1);
-    const targetNps = 9.5 + 3 * godScale;
+    // デーモンは完全ネタ枠: 32分グリッドで人間の限界を超える密度を敷く
+    const targetNps = demon ? 16 : 9.5 + 3 * godScale;
     const start = 2 * 4 * spb;
     const end = (song.def.bars - 2) * 4 * spb;
     const chartStart = Math.min(...notes.map((n) => n.t));
     const chartEnd = Math.max(...notes.map((n) => n.t));
     const targetNotes = Math.floor(targetNps * (chartEnd - chartStart));
-    const s24 = spb / 6;
+    const s24 = demon ? spb / 8 : spb / 6;
     const rng = mulberry32(song.def.seed * 97 + 39);
 
     const canPlace = (lane, t) => {
@@ -363,14 +367,14 @@ function chartFromSong(song, dif) {
         const lane = (lane0 + k) % 4;
         if (!canPlace(lane, t)) continue;
         const phraseBurst = Math.floor((t - start) / spb) % 16 >= 14;
-        const flickP = 0.2 + 0.35 * godScale;
+        const flickP = demon ? 0.6 : 0.2 + 0.35 * godScale;
         notes.push({ t, lane, type: phraseBurst || rng() < flickP ? "flick" : "tap", dur: 0 });
         firstLane = lane;
         break;
       }
       if (firstLane < 0 || !allowDouble || notes.length >= targetNotes) return;
       const lane2 = (firstLane + 2) % 4;
-      const doubleP = 0.18 + 0.32 * godScale;
+      const doubleP = demon ? 0.65 : 0.18 + 0.32 * godScale;
       if (rng() < doubleP && canPlace(lane2, t)) notes.push({ t, lane: lane2, type: "tap", dur: 0 });
     };
 
@@ -1078,17 +1082,20 @@ function getSong(def) {
   return builtSongs.get(def.id);
 }
 
-function songLv(def) { return def.lvBase + DIFF_META[diff].lv; }
+function songLv(def) { return (def.lvOv && def.lvOv[diff] != null) ? def.lvOv[diff] : def.lvBase + DIFF_META[diff].lv; }
 
 function renderSongList() {
   const list = $("songList");
   list.innerHTML = "";
   for (const def of SONG_DEFS) {
+    if (def.godOnly && diff !== "god") continue;
     const card = document.createElement("div");
-    card.className = "song-card";
+    card.className = def.demon ? "song-card demon-card" : "song-card";
     const hs = localStorage.getItem(`nb_hs_${def.id}_${diff}`);
     const m = DIFF_META[diff];
-    const lvStyle = diff === "god"
+    const lvStyle = def.demon
+      ? `background:linear-gradient(90deg,#ff1e1e,#ff6a00,#ff1e5e);color:#fff;text-shadow:0 0 6px rgba(0,0,0,.6);`
+      : diff === "god"
       ? `background:linear-gradient(90deg,#ff5c74,#ffe066,#7dffa9,#4ffcff,#b46bff);color:#111;`
       : `background:${m.color};`;
     card.innerHTML = `
