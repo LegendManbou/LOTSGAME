@@ -23,6 +23,7 @@ body {
 
 #gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
 #touchLayer { position: fixed; inset: 0; z-index: 5; }
+#fx { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 6; pointer-events: none; }
 
 /* ── HUD ── */
 #hud { position: fixed; inset: 0; z-index: 10; pointer-events: none; }
@@ -40,7 +41,8 @@ body {
   padding: 7px 12px; border-radius: 999px; cursor: pointer;
 }
 .round-label { font-size: 12px; font-weight: 800; color: var(--yellow); text-shadow: 0 0 8px rgba(255, 224, 102, .6); }
-.score-strip { margin-left: auto; display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end; max-width: 60%; }
+.hud-right { margin-left: auto; display: flex; gap: 6px; align-items: flex-start; }
+.score-strip { display: flex; flex-direction: column; gap: 5px; align-items: flex-end; }
 .score-chip {
   font-size: 10.5px; font-weight: 800; padding: 3px 8px; border-radius: 999px;
   background: rgba(8, 14, 40, .75); border: 1px solid rgba(140, 150, 255, .3);
@@ -181,3 +183,4 @@ body {
 .rank-row .medal { font-size: 20px; }
 .rank-row .pts { margin-left: auto; color: var(--cyan); font-weight: 900; }
 .rank-row.first { border-color: var(--yellow); box-shadow: 0 0 14px rgba(255, 224, 102, .3); }
+.final-panel .primary-btn { width: auto; flex: 1.3; margin-top: 0; }

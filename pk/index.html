@@ -13,13 +13,17 @@
 
   <canvas id="gl"></canvas>
   <div id="touchLayer"></div>
+  <canvas id="fx"></canvas>
 
   <!-- ── ゲーム中HUD ── -->
   <div id="hud" class="hidden">
     <div class="hud-top">
       <button id="quitBtn" class="hud-btn">← やめる</button>
       <div id="roundLabel" class="round-label"></div>
-      <div id="scoreStrip" class="score-strip"></div>
+      <div class="hud-right">
+        <button id="viewBtn" class="hud-btn hidden">🎥 視点:大</button>
+        <div id="scoreStrip" class="score-strip"></div>
+      </div>
     </div>
     <div id="phaseMsg" class="phase-msg"></div>
     <div id="setTimer" class="set-timer hidden"></div>
@@ -112,7 +116,7 @@
       <p id="guestWait" class="guest-wait hidden">ホストのスタートを待ってるよ…</p>
     </div>
 
-    <p class="credit">3Dグラフィック・ゲームシステムぜんぶオリジナル(LOTSGAME自作)<br>キッカー: スワイプでシュート / キーパー: ドラッグで位置ぎめ→スワイプで飛びこみ</p>
+    <p class="credit">3Dグラフィック・ゲームシステムぜんぶオリジナル(LOTSGAME自作)<br>キッカー: 弧を描くスワイプでカーブシュート / キーパー: 蹴る瞬間まで左右に動ける→スワイプで飛びこみ(視点切りかえOK)</p>
   </div>
 
   <!-- ── 最終リザルト ── -->
