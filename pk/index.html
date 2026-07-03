@@ -183,7 +183,7 @@
 
   <!-- ── ゲーム中の設定(ホスト/ソロ) ── -->
   <div id="gamePanel" class="overlay hidden">
-    <div class="final-panel">
+    <div class="final-panel gp-panel">
       <h2>⚙ 試合のせってい</h2>
       <div id="gpInfo" class="gp-info"></div>
       <div class="btn-row">
@@ -191,6 +191,52 @@
         <button id="gpEnd" class="secondary-btn">🏁 ここで終了</button>
       </div>
       <div id="gpWaiting"></div>
+      <div id="gpTeams" class="hidden">
+        <div class="gp-label">チーム分け(タップで移動・次のラウンドから)</div>
+        <div id="gpTeamList" class="member-list"></div>
+      </div>
+      <details class="adv-panel gp-adv">
+        <summary>⚙ こまかいせってい(次のラウンドから)</summary>
+        <div class="panel-row">
+          <span class="panel-label">同時に蹴る人数(ボールの数)</span>
+          <div class="chip-row" id="gpKickers">
+            <button class="chip" data-v="1">1人</button>
+            <button class="chip" data-v="2">2人</button>
+            <button class="chip" data-v="3">3人</button>
+          </div>
+        </div>
+        <div class="panel-row">
+          <span class="panel-label">配置タイム(キーパーの準備時間)</span>
+          <div class="chip-row" id="gpSetDur">
+            <button class="chip" data-v="3">3秒</button>
+            <button class="chip" data-v="6">6秒</button>
+            <button class="chip" data-v="10">10秒</button>
+          </div>
+        </div>
+        <div class="panel-row">
+          <span class="panel-label">キック制限時間(すぎると自動キック)</span>
+          <div class="chip-row" id="gpKickLimit">
+            <button class="chip" data-v="8">8秒</button>
+            <button class="chip" data-v="12">12秒</button>
+            <button class="chip" data-v="20">20秒</button>
+          </div>
+        </div>
+        <div class="panel-row">
+          <span class="panel-label">CPUの強さ</span>
+          <div class="chip-row" id="gpCpu">
+            <button class="chip" data-v="0">よわい</button>
+            <button class="chip" data-v="1">ふつう</button>
+            <button class="chip" data-v="2">つよい</button>
+          </div>
+        </div>
+        <div class="panel-row">
+          <span class="panel-label">サドンデス(同点なら決着まで延長)</span>
+          <div class="chip-row" id="gpSudden">
+            <button class="chip" data-v="0">なし</button>
+            <button class="chip" data-v="1">あり</button>
+          </div>
+        </div>
+      </details>
       <div class="btn-row">
         <button id="gpClose" class="primary-btn">とじる</button>
       </div>

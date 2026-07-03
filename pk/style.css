@@ -213,3 +213,6 @@ body {
   font-size: 13px; font-weight: 800;
 }
 .gp-admit { flex: 0 0 auto; padding: 7px 12px; font-size: 12px; }
+.gp-panel { max-height: 86dvh; overflow-y: auto; touch-action: pan-y; }
+.gp-adv { text-align: left; margin-top: 14px; }
+#gpTeamList { justify-content: center; padding-top: 2px; }

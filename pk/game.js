@@ -785,13 +785,60 @@ const host = {
     if (!m || !G.activeMids || G.activeMids.has(mid)) return;
     let team = null;
     if (G.teams) {
-      let best = 0;
-      G.teams.forEach((t, ti) => { if (t.mids.length < G.teams[best].mids.length) best = ti; });
-      team = best;
+      // ⚙で先にチームを決めてあればそれを優先、なければ人数が少ないチームへ
+      const pre = G.teams.findIndex((t) => t.mids.includes(mid));
+      if (pre >= 0) team = pre;
+      else {
+        let best = 0;
+        G.teams.forEach((t, ti) => { if (t.mids.length < G.teams[best].mids.length) best = ti; });
+        team = best;
+      }
     }
     this.order.push({ ks: [{ mid }], team });
     // ※midは中継時に送信者のmidで上書きされるので、参加者は who で送る
-    net.send({ t: "joined", who: mid, name: m.name, team, scores: G.scores });
+    // teams同梱: 途中参加した本人はstartを受けてないのでここでチーム情報をもらう
+    net.send({ t: "joined", who: mid, name: m.name, team, scores: G.scores, teams: G.teams });
+  },
+  // ゲーム中⚙: ボール数やチーム分けが変わった時、まだ蹴ってないラウンドを今の設定で組みなおす
+  rebuildRemaining() {
+    if (G.phase === "lobby" || G.phase === "final") return;
+    const rest = this.order.splice(this.roundNo);
+    const kn = clamp(G.cfg.kickersN, 1, MAX_BALLS);
+    if (G.mode === "solo") {
+      let mine = 0, cpu = 0;
+      for (const ch of rest) (ch.ks.some((s) => s.mid === 0) ? mine++ : cpu++);
+      const cpus = (n) => Array.from({ length: n }, () => ({ cpu: true }));
+      while (mine > 0 || cpu > 0) {
+        if (mine > 0) { mine--; this.order.push({ ks: [{ mid: 0 }, ...cpus(kn - 1)], team: null }); }
+        if (cpu > 0) { cpu--; this.order.push({ ks: cpus(kn), team: null }); }
+      }
+      return;
+    }
+    // 残りのキック回数を数えて、今のチーム構成で組みなおす
+    const count = new Map();
+    for (const ch of rest) for (const s of ch.ks) if (s.mid != null) count.set(s.mid, (count.get(s.mid) || 0) + 1);
+    const pushChunks = (mids, team) => {
+      for (let i = 0; i < mids.length; i += kn) this.order.push({ ks: mids.slice(i, i + kn).map((mid) => ({ mid })), team });
+    };
+    if (G.teams) {
+      G.teams.forEach((t, ti) => {
+        const mids = [];
+        for (const mid of t.mids) {
+          const c = count.get(mid) || 0;
+          for (let j = 0; j < c; j++) mids.push(mid);
+          count.delete(mid);
+        }
+        pushChunks(mids, ti);
+      });
+      // どのチームにもいない人の分(保険)
+      const rest2 = [];
+      for (const [mid, c] of count) for (let j = 0; j < c; j++) rest2.push(mid);
+      if (rest2.length) pushChunks(rest2, null);
+    } else {
+      const mids = [];
+      for (const [mid, c] of count) for (let j = 0; j < c; j++) mids.push(mid);
+      pushChunks(mids, null);
+    }
   },
 };
 
@@ -846,7 +893,9 @@ function handleMsg(msg) {
       break;
     }
     case "joined": {
-      if (G.activeMids) G.activeMids.add(msg.who);
+      if (!G.activeMids) G.activeMids = new Set();
+      G.activeMids.add(msg.who);
+      if (msg.teams && !G.teams) G.teams = msg.teams;
       if (msg.team != null && G.teams && G.teams[msg.team] && !G.teams[msg.team].mids.includes(msg.who)) {
         G.teams[msg.team].mids.push(msg.who);
       }
@@ -855,6 +904,11 @@ function handleMsg(msg) {
       updateScoreStrip();
       renderGamePanel();
       if (msg.who === G.myMid) showMatch();   // 途中参加した本人は試合画面へ
+      break;
+    }
+    case "teams": {
+      G.teams = msg.teams || null;
+      updateScoreStrip();
       break;
     }
     case "sudden": {
@@ -1338,6 +1392,19 @@ chipRow("roomMode", (v) => {
   renderTeamAssign();
 });
 
+// ゲーム中⚙の「こまかいせってい」(ロビー側のチップ表示とも同期)
+function syncChips(id, v) {
+  document.querySelectorAll(`#${id} .chip`).forEach((c) => c.classList.toggle("active", Number(c.dataset.v) === Number(v)));
+}
+function bindGpChip(gpId, lobbyId, apply) {
+  chipRow(gpId, (v) => { apply(v); syncChips(lobbyId, v); });
+}
+bindGpChip("gpKickers", "advKickers", (v) => { G.cfg.kickersN = v; if (isDirector()) host.rebuildRemaining(); });
+bindGpChip("gpSetDur", "advSetDur", (v) => { G.cfg.setDur = v; });
+bindGpChip("gpKickLimit", "advKickLimit", (v) => { G.cfg.kickLimit = v; });
+bindGpChip("gpCpu", "advCpu", (v) => { G.cfg.cpuLevel = v; });
+bindGpChip("gpSudden", "advSudden", (v) => { G.cfg.sudden = !!v; });
+
 // チーム分け(ホストがロビーでタップして振り分け)
 const teamOf = new Map();   // mid -> 0..3 | undefined
 function renderTeamAssign() {
@@ -1438,9 +1505,43 @@ $("viewBtn").onclick = () => {
 function refreshGearBtn() {
   $("gearBtn").classList.toggle("hidden", !(isDirector() && G.phase !== "lobby"));
 }
+// ゲーム中⚙: チーム分け(タップで次のチームへ移動、次のラウンドから反映)
+function renderGpTeams() {
+  const wrap = $("gpTeams");
+  const show = G.mode === "room" && net.isHost && !!G.teams;
+  wrap.classList.toggle("hidden", !show);
+  if (!show) return;
+  const box = $("gpTeamList");
+  box.innerHTML = "";
+  for (const m of G.members) {
+    const ti = G.teams.findIndex((t) => t.mids.includes(m.mid));
+    const waiting = G.activeMids && !G.activeMids.has(m.mid);
+    const b = document.createElement("button");
+    b.className = "chip team-pick" + (ti >= 0 ? " t" + ti : "");
+    b.textContent = (ti >= 0 ? G.teams[ti].emoji + " " : "❔ ") + m.name + (waiting ? "(待機中)" : "");
+    b.onclick = () => {
+      const next = ti < 0 ? 0 : (ti + 1) % G.teams.length;
+      for (const t of G.teams) t.mids = t.mids.filter((x) => x !== m.mid);
+      G.teams[next].mids.push(m.mid);
+      teamOf.set(m.mid, next);                    // ロビーの振り分けとも同期
+      net.send({ t: "teams", teams: G.teams });
+      host.rebuildRemaining();
+      renderGamePanel();
+    };
+    box.appendChild(b);
+  }
+}
+
 function renderGamePanel() {
   if ($("gamePanel").classList.contains("hidden")) return;
-  $("gpInfo").textContent = `ラウンド ${G.round}/${G.totalRounds}(のこり ${Math.max(0, G.totalRounds - G.round)})`;
+  const total = isDirector() ? host.order.length : G.totalRounds;
+  $("gpInfo").textContent = `ラウンド ${G.round}/${total}(のこり ${Math.max(0, total - G.round)})`;
+  syncChips("gpKickers", G.cfg.kickersN);
+  syncChips("gpSetDur", G.cfg.setDur);
+  syncChips("gpKickLimit", G.cfg.kickLimit);
+  syncChips("gpCpu", G.cfg.cpuLevel);
+  syncChips("gpSudden", G.cfg.sudden ? 1 : 0);
+  renderGpTeams();
   const box = $("gpWaiting");
   box.innerHTML = "";
   if (G.mode === "room" && net.isHost && G.activeMids) {
