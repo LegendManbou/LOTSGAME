@@ -22,6 +22,16 @@ function mulberry32(seed) {
 
 const midiFreq = (m) => 440 * Math.pow(2, (m - 69) / 12);
 
+// ────────────────── 設定 ──────────────────
+const SETTINGS = Object.assign(
+  { speed: 6, offset: 0, skin: "neon", ap: true },
+  JSON.parse(localStorage.getItem("nb_settings") || "{}")
+);
+function saveSettings() { localStorage.setItem("nb_settings", JSON.stringify(SETTINGS)); }
+// ノーツの速さ(1〜12) → ノーツが降ってくる時間(秒)
+const approachTime = () => clamp(3.0 / (0.55 + 0.3 * SETTINGS.speed), 0.45, 3.6);
+const OFF = () => SETTINGS.offset / 1000; // タイミング調整(秒)
+
 // ────────────────── オーディオ基盤 ──────────────────
 let ctx = null, master = null, noiseBuf = null;
 
@@ -118,6 +128,34 @@ const INST = {
     o.connect(g).connect(master);
     o.start(when); o.stop(when + 0.08);
   },
+  tick(when, acc) {
+    const o = ctx.createOscillator(); o.type = "sine";
+    o.frequency.value = acc ? 1320 : 880;
+    const g = ctx.createGain();
+    env(when, 0.2, 0.05, g);
+    o.connect(g).connect(master);
+    o.start(when); o.stop(when + 0.07);
+  },
+};
+
+// ────────────────── 難易度 ──────────────────
+const DIFFS = ["easy", "normal", "hard", "expert", "master", "god"];
+const DIFF_META = {
+  easy:   { label: "EASY",   color: "#46d275", lv: 2 },
+  normal: { label: "NORMAL", color: "#38b6ff", lv: 8 },
+  hard:   { label: "HARD",   color: "#ffb020", lv: 15 },
+  expert: { label: "EXPERT", color: "#ff5c74", lv: 21 },
+  master: { label: "MASTER", color: "#b46bff", lv: 26 },
+  god:    { label: "GOD",    color: "#ffffff", lv: 31 },
+};
+// 譜面の密度パラメータ
+const DIFF_PARAMS = {
+  easy:   { gap: 0.50,  kick: 0,   snare: 0,    hat: 0,    bass: 0,   dbl: 0,    flick: false },
+  normal: { gap: 0.30,  kick: 0.3, snare: 0,    hat: 0,    bass: 0,   dbl: 0,    flick: true  },
+  hard:   { gap: 0.19,  kick: 1,   snare: 0.35, hat: 0,    bass: 0,   dbl: 0,    flick: true  },
+  expert: { gap: 0.14,  kick: 1,   snare: 0.85, hat: 0.25, bass: 0,   dbl: 0.08, flick: true  },
+  master: { gap: 0.105, kick: 1,   snare: 1,    hat: 0.55, bass: 0,   dbl: 0.16, flick: true  },
+  god:    { gap: 0.075, kick: 1,   snare: 1,    hat: 0.9,  bass: 0.5, dbl: 0.30, flick: true  },
 };
 
 // ────────────────── 内蔵曲(自動作曲) ──────────────────
@@ -125,9 +163,9 @@ const MAJOR = [0, 2, 4, 5, 7, 9, 11];
 const MINOR = [0, 2, 3, 5, 7, 8, 10];
 
 const SONG_DEFS = [
-  { id: "starlight", name: "スターライト・ラン", emoji: "🌟", bpm: 126, seed: 11, bars: 34, root: 60, mode: "major", prog: [0, 5, 3, 4], wave: "triangle", desc: "キラキラ王道ポップ。はじめてはコレ!" },
-  { id: "cyber", name: "サイバー・パレード", emoji: "🤖", bpm: 146, seed: 27, bars: 36, root: 57, mode: "minor", prog: [0, 5, 2, 6], wave: "square", desc: "ズンズン進むエレクトロ行進曲" },
-  { id: "overdrive", name: "ネオン・オーバードライブ", emoji: "⚡", bpm: 168, seed: 42, bars: 38, root: 52, mode: "minor", prog: [0, 6, 5, 4], wave: "sawtooth", desc: "最高速のクライマックス。腕が試される" },
+  { id: "starlight", name: "スターライト・ラン", emoji: "🌟", bpm: 126, seed: 11, bars: 34, root: 60, mode: "major", prog: [0, 5, 3, 4], wave: "triangle", lvBase: 3, desc: "キラキラ王道ポップ。はじめてはコレ!" },
+  { id: "cyber", name: "サイバー・パレード", emoji: "🤖", bpm: 146, seed: 27, bars: 36, root: 57, mode: "minor", prog: [0, 5, 2, 6], wave: "square", lvBase: 6, desc: "ズンズン進むエレクトロ行進曲" },
+  { id: "overdrive", name: "ネオン・オーバードライブ", emoji: "⚡", bpm: 168, seed: 42, bars: 38, root: 52, mode: "minor", prog: [0, 6, 5, 4], wave: "sawtooth", lvBase: 9, desc: "最高速のクライマックス。腕が試される" },
 ];
 
 // 曲データ(音イベント列)を種から決定的に生成する
@@ -162,7 +200,7 @@ function buildSong(def) {
     if (!intro) {
       for (let e = 0; e < 8; e++) {
         const oct = e % 4 === 2 ? 0 : -1;
-        ev.push({ t: barT + e * 0.5 * spb, inst: "bass", f: midiFreq(deg(chordDeg, oct) - 12), d: 0.5 * spb * 0.9 });
+        ev.push({ t: barT + e * 0.5 * spb, inst: "bass", f: midiFreq(deg(chordDeg, oct) - 12), d: 0.5 * spb * 0.9, eighth: e });
       }
     }
 
@@ -197,21 +235,31 @@ function buildSong(def) {
 }
 
 // 内蔵曲の譜面: メロディ+ドラムから難易度別に生成
-function chartFromSong(song, diff) {
+function chartFromSong(song, dif) {
   const { events, spb } = song;
-  const minGap = { easy: 0.5, normal: 0.3, hard: 0.18 }[diff];
+  const P = DIFF_PARAMS[dif];
   const laneOf = (pitch) => clamp(Math.floor((pitch - 5) / 3), 0, 3);
   const notes = [];
   let lastT = -9;
   const lastLaneT = [-9, -9, -9, -9];
 
-  const push = (t, lane, type, dur) => {
-    if (t - lastT < minGap && type !== "hold") return false;
+  const laneFree = (l, t) => t - lastLaneT[l] >= Math.max(P.gap, 0.22);
+
+  const push = (t, lane, type, dur, canDouble) => {
+    if (t - lastT < P.gap && type !== "hold") return false;
     for (let k = 0; k < 4; k++) {
       const l = (lane + k) % 4;
-      if (t - lastLaneT[l] >= Math.max(minGap, 0.24)) {
+      if (laneFree(l, t)) {
         notes.push({ t, lane: l, type, dur: dur || 0 });
         lastT = t; lastLaneT[l] = type === "hold" ? t + dur : t;
+        // 同時押し(高難易度のみ)
+        if (canDouble && P.dbl > 0 && Math.random() < P.dbl && type !== "hold") {
+          const l2 = (l + 2) % 4;
+          if (laneFree(l2, t)) {
+            notes.push({ t, lane: l2, type, dur: 0 });
+            lastLaneT[l2] = t;
+          }
+        }
         return true;
       }
     }
@@ -222,23 +270,51 @@ function chartFromSong(song, diff) {
     if (e.melody) {
       const lane = laneOf(e.pitch);
       if (e.durE >= 3) push(e.t, lane, "hold", e.durE * 0.5 * spb * 0.9);
-      else if (e.phraseEnd && diff !== "easy") push(e.t, lane, "flick");
-      else if (e.phraseEnd && Math.random() < 0) push(e.t, lane, "tap");
-      else push(e.t, lane, "tap");
-    } else if (diff === "hard" && e.inst === "kick" && e.strong) {
-      push(e.t, Math.random() < 0.5 ? 0 : 3, "tap");
-    } else if (diff === "hard" && e.inst === "snare") {
-      if (Math.random() < 0.35) push(e.t, Math.random() < 0.5 ? 1 : 2, "tap");
-    } else if (diff === "normal" && e.inst === "kick" && e.strong) {
-      if (Math.random() < 0.3) push(e.t, Math.random() < 0.5 ? 0 : 3, "tap");
+      else if (e.phraseEnd && P.flick) push(e.t, lane, "flick", 0, dif === "god" || dif === "master");
+      else push(e.t, lane, "tap", 0, e.strong);
+    } else if (e.inst === "kick" && e.strong && P.kick > 0) {
+      if (Math.random() < P.kick) push(e.t, Math.random() < 0.5 ? 0 : 3, "tap", 0, true);
+    } else if (e.inst === "snare" && P.snare > 0) {
+      if (Math.random() < P.snare) push(e.t, Math.random() < 0.5 ? 1 : 2, "tap", 0, true);
+    } else if (e.inst === "hat" && P.hat > 0) {
+      if (Math.random() < P.hat) push(e.t, Math.floor(Math.random() * 4), "tap", 0, false);
+    } else if (e.inst === "bass" && P.bass > 0 && e.eighth % 2 === 1) {
+      if (Math.random() < P.bass) push(e.t, Math.floor(Math.random() * 4), "tap", 0, false);
     }
   }
+
+  // MASTER/GOD: 16分音符ラッシュを敷きつめる(GODは神の領域)
+  const rushP = dif === "god" ? 0.65 : dif === "master" ? 0.14 : 0;
+  if (rushP > 0) {
+    const bars = song.def.bars;
+    const s16 = spb / 4;
+    for (let t = 2 * 4 * spb; t < (bars - 2) * 4 * spb; t += s16) {
+      if (Math.random() >= rushP) continue;
+      // 既存ノーツとの最小間隔(全体)
+      let minD = Infinity;
+      for (const n of notes) minD = Math.min(minD, Math.abs(n.t - t));
+      if (minD < P.gap) continue;
+      // 空いているレーンを探す(ロング中のレーンは避ける)
+      const lane0 = Math.floor(Math.random() * 4);
+      for (let k = 0; k < 4; k++) {
+        const l = (lane0 + k) % 4;
+        let free = true;
+        for (const n of notes) {
+          if (n.lane !== l) continue;
+          const end = n.type === "hold" ? n.t + n.dur : n.t;
+          if (t > n.t - 0.22 && t < end + 0.22) { free = false; break; }
+        }
+        if (free) { notes.push({ t, lane: l, type: "tap", dur: 0 }); break; }
+      }
+    }
+  }
+
   notes.sort((a, b) => a.t - b.t);
   return notes;
 }
 
 // ────────────────── 自分の曲 → 譜面自動生成 ──────────────────
-async function analyzeAudio(buffer, diff, onProgress) {
+async function analyzeAudio(buffer, dif, onProgress) {
   const sr = buffer.sampleRate;
   const n = buffer.length;
   const mono = new Float32Array(n);
@@ -273,7 +349,9 @@ async function analyzeAudio(buffer, diff, onProgress) {
   }
   // 適応しきい値(±0.75秒の平均+偏差)
   const W = Math.round(0.75 / (hop / sr));
-  const minGap = { easy: 0.46, normal: 0.3, hard: 0.19 }[diff];
+  const minGap = { easy: 0.46, normal: 0.3, hard: 0.19, expert: 0.14, master: 0.11, god: 0.08 }[dif];
+  const sdMul = { easy: 1.25, normal: 1.25, hard: 1.15, expert: 1.0, master: 0.9, god: 0.72 }[dif];
+  const dblP = DIFF_PARAMS[dif].dbl;
   const notes = [];
   let lastT = -9, lastLane = 0, strongCount = 0;
   const lastLaneT = [-9, -9, -9, -9];
@@ -283,7 +361,7 @@ async function analyzeAudio(buffer, diff, onProgress) {
     const lo = Math.max(0, f - W), hi = Math.min(frames, f + W);
     let mean = 0; for (let i = lo; i < hi; i++) mean += flux[i]; mean /= hi - lo;
     let sd = 0; for (let i = lo; i < hi; i++) sd += (flux[i] - mean) ** 2; sd = Math.sqrt(sd / (hi - lo));
-    const thr = mean + 1.25 * sd + 0.004;
+    const thr = mean + sdMul * sd + 0.004;
     const t = (f * hop) / sr;
     if (flux[f] < thr) continue;
     if (!(flux[f] >= flux[f - 1] && flux[f] >= flux[f + 1])) continue;
@@ -299,22 +377,31 @@ async function analyzeAudio(buffer, diff, onProgress) {
     let type = "tap", dur = 0;
     const strong = flux[f] > mean + 2.6 * sd;
     if (strong) strongCount++;
-    if (diff !== "easy" && strong && strongCount % 3 === 0) type = "flick";
+    if (dif !== "easy" && strong && strongCount % 3 === 0) type = "flick";
 
     if (type !== "flick") {
       // 先の音量が持続しているならロング
       const ahead = Math.min(frames, f + Math.round(0.7 / (hop / sr)));
       let sus = 0; for (let i = f; i < ahead; i++) sus += rms[i]; sus /= ahead - f;
-      if (sus > rms[f] * 0.55 && t - lastT > 0.8 && Math.random() < (diff === "hard" ? 0.5 : 0.35)) {
-        type = "hold"; dur = clamp(diff === "easy" ? 1.0 : 0.8, 0.5, 2.2);
+      if (sus > rms[f] * 0.55 && t - lastT > 0.8 && Math.random() < (dif === "easy" || dif === "normal" ? 0.35 : 0.5)) {
+        type = "hold"; dur = clamp(dif === "easy" ? 1.0 : 0.8, 0.5, 2.2);
       }
     }
-    if (t - lastLaneT[lane] < 0.24) lane = (lane + 2) % 4;
-    if (t - lastLaneT[lane] < 0.24) continue;
+    if (t - lastLaneT[lane] < 0.22) lane = (lane + 2) % 4;
+    if (t - lastLaneT[lane] < 0.22) continue;
     if (t < 1.2) continue; // 曲頭は空ける
 
     notes.push({ t, lane, type, dur });
     lastT = t; lastLane = lane; lastLaneT[lane] = type === "hold" ? t + dur : t;
+
+    // 高難易度: 強い音で同時押し
+    if (dblP > 0 && strong && type === "tap" && Math.random() < dblP) {
+      const l2 = (lane + 2) % 4;
+      if (t - lastLaneT[l2] >= 0.22) {
+        notes.push({ t, lane: l2, type: "tap", dur: 0 });
+        lastLaneT[l2] = t;
+      }
+    }
     if (f % 2000 === 0) { onProgress(85 + Math.round((f / frames) * 15)); await new Promise((r) => setTimeout(r)); }
   }
   onProgress(100);
@@ -329,7 +416,6 @@ const WEIGHT = { perfect: 1, great: 0.7, good: 0.4, miss: 0 };
 
 let state = "select";
 let diff = "normal";
-let approach = 1.6;
 let current = null;      // {song(内蔵) | buffer(カスタム), name, id, duration}
 let chart = [];
 let totalElems = 0;
@@ -337,7 +423,7 @@ let startTime = 0;       // ctx.currentTime基準の曲開始時刻
 let evIdx = 0, schedTimer = 0;
 let customSrc = null;
 let holdKeys = [null, null, null, null];   // レーンごとの押下中ホールド {note}
-let counts, weightSum, combo, maxCombo, score;
+let counts, weightSum, combo, maxCombo, score, apAlive;
 let effects = [];        // ヒットエフェクト
 let songDone = false, resultShown = false;
 
@@ -376,11 +462,12 @@ function draw() {
   g2d.clearRect(0, 0, W, H);
   const { bw, tw, horizon, judge } = geo();
   const now = playNow();
+  const approach = approachTime();
 
   // ステージ(台形)
   const grad = g2d.createLinearGradient(0, horizon, 0, judge);
   grad.addColorStop(0, "rgba(255,255,255,0.02)");
-  grad.addColorStop(1, "rgba(120,60,220,0.22)");
+  grad.addColorStop(1, "rgba(90,70,200,0.22)");
   g2d.fillStyle = grad;
   g2d.beginPath();
   g2d.moveTo(W / 2 - tw / 2, horizon);
@@ -391,7 +478,7 @@ function draw() {
   g2d.fill();
 
   // レーン区切り
-  g2d.strokeStyle = "rgba(160,140,255,0.35)";
+  g2d.strokeStyle = "rgba(150,150,255,0.32)";
   g2d.lineWidth = 1;
   for (let l = 0; l <= LANES; l++) {
     g2d.beginPath();
@@ -400,10 +487,20 @@ function draw() {
     g2d.stroke();
   }
 
-  // 判定ライン
+  // 判定ライン(AP継続中は虹色に光る)
   g2d.save();
-  g2d.shadowColor = "#4ffcff"; g2d.shadowBlur = 16;
-  g2d.strokeStyle = "#b7fdff"; g2d.lineWidth = 4;
+  if (state === "play" && SETTINGS.ap && apAlive && combo > 0) {
+    const hue = (performance.now() / 8) % 360;
+    const rainGrad = g2d.createLinearGradient(W / 2 - bw / 2, 0, W / 2 + bw / 2, 0);
+    for (let i = 0; i <= 6; i++) {
+      rainGrad.addColorStop(i / 6, `hsl(${(hue + i * 60) % 360}, 100%, 70%)`);
+    }
+    g2d.shadowColor = `hsl(${hue}, 100%, 70%)`; g2d.shadowBlur = 22;
+    g2d.strokeStyle = rainGrad; g2d.lineWidth = 5;
+  } else {
+    g2d.shadowColor = "#4ffcff"; g2d.shadowBlur = 16;
+    g2d.strokeStyle = "#b7fdff"; g2d.lineWidth = 4;
+  }
   g2d.beginPath();
   g2d.moveTo(W / 2 - bw / 2 - 6, judge);
   g2d.lineTo(W / 2 + bw / 2 + 6, judge);
@@ -431,7 +528,7 @@ function draw() {
       if (nt.type === "hold") {
         const pE = 1 - (nt.t + nt.dur - now) / approach;
         if (pE > 1.06 || pS < -0.05) continue;
-        drawHold(nt, pS, pE, now);
+        drawHold(nt, pS, pE);
       } else {
         if (pS < -0.05 || pS > 1.06) continue;
         drawNote(nt, pS);
@@ -444,18 +541,50 @@ function draw() {
   }
 }
 
+// ノーツ本体(スキン別)
 function noteBar(lane, p, color, hFactor) {
   const r = laneRect(lane, p);
   const h = (6 + 16 * r.e) * (hFactor || 1);
   const pad = r.w * 0.07;
+  const skin = SETTINGS.skin;
   g2d.save();
-  g2d.shadowColor = color; g2d.shadowBlur = 14 * r.e;
-  g2d.fillStyle = color;
-  roundRect(r.x + pad, r.y - h / 2, r.w - pad * 2, h, h / 2.4);
-  g2d.fill();
-  g2d.fillStyle = "rgba(255,255,255,0.85)";
-  roundRect(r.x + pad + 3, r.y - h / 6, r.w - pad * 2 - 6, h / 3, h / 6);
-  g2d.fill();
+  if (skin === "classic") {
+    // クラシック: フラットな板
+    g2d.fillStyle = color;
+    g2d.fillRect(r.x + pad, r.y - h / 2, r.w - pad * 2, h);
+    g2d.strokeStyle = "rgba(255,255,255,.9)";
+    g2d.lineWidth = 1.5;
+    g2d.strokeRect(r.x + pad, r.y - h / 2, r.w - pad * 2, h);
+  } else if (skin === "crystal") {
+    // クリスタル: ひし形の宝石
+    const cx = r.x + r.w / 2, cy = r.y;
+    const hw = (r.w - pad * 2) / 2, hh = h * 1.15;
+    const gr = g2d.createLinearGradient(cx, cy - hh, cx, cy + hh);
+    gr.addColorStop(0, "rgba(255,255,255,.95)");
+    gr.addColorStop(0.5, color);
+    gr.addColorStop(1, color);
+    g2d.shadowColor = color; g2d.shadowBlur = 16 * r.e;
+    g2d.fillStyle = gr;
+    g2d.beginPath();
+    g2d.moveTo(cx, cy - hh);
+    g2d.lineTo(cx + hw, cy);
+    g2d.lineTo(cx, cy + hh);
+    g2d.lineTo(cx - hw, cy);
+    g2d.closePath();
+    g2d.fill();
+    g2d.strokeStyle = "rgba(255,255,255,.8)";
+    g2d.lineWidth = 1;
+    g2d.stroke();
+  } else {
+    // ネオン(標準): 光る丸棒
+    g2d.shadowColor = color; g2d.shadowBlur = 14 * r.e;
+    g2d.fillStyle = color;
+    roundRect(r.x + pad, r.y - h / 2, r.w - pad * 2, h, h / 2.4);
+    g2d.fill();
+    g2d.fillStyle = "rgba(255,255,255,0.85)";
+    roundRect(r.x + pad + 3, r.y - h / 6, r.w - pad * 2 - 6, h / 3, h / 6);
+    g2d.fill();
+  }
   g2d.restore();
   return r;
 }
@@ -490,7 +619,7 @@ function drawNote(nt, p) {
   }
 }
 
-function drawHold(nt, pS, pE, now) {
+function drawHold(nt, pS, pE) {
   const holding = nt.holding;
   const pTop = clamp(pE, 0, 1.0);
   const pBot = holding ? 1 : clamp(pS, 0, 1.0);
@@ -538,9 +667,10 @@ function playNow() {
 function loop() {
   if (state === "play") {
     const now = playNow();
+    const nowJ = now - OFF(); // 判定用(タイミング調整込み)
     // MISS判定
     for (const nt of chart) {
-      if (!nt.judged && now - nt.t > WIN.good) {
+      if (!nt.judged && nowJ - nt.t > WIN.good) {
         nt.judged = true;
         registerJudge("miss", nt.lane, false);
         if (nt.type === "hold") { nt.endJudged = true; registerJudge("miss", nt.lane, false); }
@@ -550,7 +680,7 @@ function loop() {
           nt.endJudged = true; nt.holding = false;
           holdKeys[nt.lane] = null;
           registerJudge("perfect", nt.lane, true);
-        } else if (!nt.holding && now - (nt.t + nt.dur) > WIN.good) {
+        } else if (!nt.holding && nowJ - (nt.t + nt.dur) > WIN.good) {
           nt.endJudged = true;
           registerJudge("miss", nt.lane, false);
         }
@@ -576,9 +706,10 @@ function judgeName(dt) {
   return null;
 }
 
-function registerJudge(name, lane, withFx) {
+function registerJudge(name, lane, withFx, dt) {
   counts[name]++;
   weightSum += WEIGHT[name];
+  if (name !== "perfect") apAlive = false;
   if (name === "miss") combo = 0;
   else { combo++; maxCombo = Math.max(maxCombo, combo); }
   score = Math.round((1000000 * weightSum) / totalElems);
@@ -591,17 +722,25 @@ function registerJudge(name, lane, withFx) {
   jv.className = "judge-view " + name;
   void jv.offsetWidth;
   jv.classList.add("show");
+  // FAST / SLOW 表示(PERFECT以外)
+  const fs = $("fsView");
+  if (dt != null && name !== "perfect" && name !== "miss") {
+    const isFast = dt < 0;
+    fs.textContent = isFast ? "FAST" : "SLOW";
+    fs.className = "fs-view " + (isFast ? "fast" : "slow");
+    void fs.offsetWidth;
+    fs.classList.add("show");
+  }
   if (withFx) {
     effects.push({ lane, color: name === "perfect" ? "#ffe066" : name === "great" ? "#4ffcff" : "#7dffa9", t0: performance.now(), seed: Math.random() * 6 });
   }
 }
 
-function findNote(lane, now, flickOnly) {
+function findNote(lane, nowJ) {
   let best = null, bestA = Infinity;
   for (const nt of chart) {
     if (nt.judged || nt.lane !== lane) continue;
-    if (flickOnly && nt.type !== "flick") continue;
-    const dt = now - nt.t;
+    const dt = nowJ - nt.t;
     if (dt < -WIN.good || dt > WIN.good) continue;
     const a = Math.abs(dt);
     if (a < bestA) { best = nt; bestA = a; }
@@ -611,11 +750,12 @@ function findNote(lane, now, flickOnly) {
 
 function hitLane(lane, isFlickGesture) {
   if (state !== "play") return;
-  const now = playNow();
-  const nt = findNote(lane, now, false);
+  const nowJ = playNow() - OFF();
+  const nt = findNote(lane, nowJ);
   if (!nt) return;
   if (nt.type === "flick" && !isFlickGesture && !allowKeyFlick) return; // タッチはフリック動作が必要
-  const name = judgeName(now - nt.t);
+  const dt = nowJ - nt.t;
+  const name = judgeName(dt);
   if (!name) return;
   nt.judged = true;
   if (nt.type === "hold") {
@@ -623,7 +763,7 @@ function hitLane(lane, isFlickGesture) {
     holdKeys[lane] = nt;
   }
   INST.tapSfx(name === "perfect" ? "perfect" : nt.type === "flick" ? "flick" : "tap");
-  registerJudge(name, lane, true);
+  registerJudge(name, lane, true, dt);
 }
 
 function releaseLane(lane) {
@@ -632,18 +772,16 @@ function releaseLane(lane) {
   holdKeys[lane] = null;
   if (nt.endJudged || !nt.holding) return;
   nt.holding = false;
-  const now = playNow();
-  const dt = now - (nt.t + nt.dur);
+  const dt = playNow() - OFF() - (nt.t + nt.dur);
   const name = judgeName(dt);
   nt.endJudged = true;
-  if (name) { INST.tapSfx(name); registerJudge(name, lane, true); }
-  else if (dt < 0) registerJudge("miss", lane, false); // 早すぎる離し
+  if (name) { INST.tapSfx(name); registerJudge(name, lane, true, dt); }
   else registerJudge("miss", lane, false);
 }
 
 // ────────────────── 入力 ──────────────────
 let laneActive = [false, false, false, false];
-let allowKeyFlick = false; // キーボード時はフリックもキーでOK
+let allowKeyFlick = false; // キーボード/マウス時はフリックもキーでOK
 const touches = new Map();
 
 function laneFromX(x) {
@@ -708,6 +846,7 @@ window.addEventListener("mouseup", () => {
 // PC用: キーボード(D F J K)
 window.addEventListener("keydown", (e) => {
   if (e.repeat) return;
+  if (settingsOpen && e.code === "KeyD") { previewTap(); return; }
   const lane = KEYS[e.code];
   if (lane == null) return;
   laneActive[lane] = true;
@@ -751,7 +890,7 @@ async function startGame(entry) {
   chart = entry.chart.map((n) => ({ ...n, judged: false, endJudged: false, holding: false }));
   totalElems = chart.reduce((s, n) => s + (n.type === "hold" ? 2 : 1), 0) || 1;
   counts = { perfect: 0, great: 0, good: 0, miss: 0 };
-  weightSum = 0; combo = 0; maxCombo = 0; score = 0;
+  weightSum = 0; combo = 0; maxCombo = 0; score = 0; apAlive = true;
   effects = []; songDone = false; resultShown = false;
   holdKeys = [null, null, null, null];
   $("scoreView").textContent = "0";
@@ -796,8 +935,15 @@ function showResult() {
   state = "result";
   const pct = weightSum / totalElems;
   const rank = pct >= 0.95 ? "S" : pct >= 0.85 ? "A" : pct >= 0.7 ? "B" : pct >= 0.5 ? "C" : "D";
+  const isAP = counts.miss === 0 && counts.great === 0 && counts.good === 0;
+  const isFC = counts.miss === 0;
+  const banner = $("resultBanner");
+  if (isAP) { banner.textContent = "ALL PERFECT!!"; banner.className = "result-banner ap"; }
+  else if (isFC) { banner.textContent = "FULL COMBO!"; banner.className = "result-banner fc"; }
+  else banner.className = "result-banner hidden";
   $("resultRank").textContent = rank;
-  $("resultSong").textContent = `${current.name} [${diff.toUpperCase()}]`;
+  $("resultRank").className = "result-rank" + (isAP && SETTINGS.ap ? " ap" : "");
+  $("resultSong").textContent = `${current.name} [${DIFF_META[diff].label}${current.lv ? " Lv." + current.lv : ""}]`;
   $("resultScore").textContent = score.toLocaleString();
   $("cPerfect").textContent = counts.perfect;
   $("cGreat").textContent = counts.great;
@@ -851,6 +997,8 @@ function getSong(def) {
   return builtSongs.get(def.id);
 }
 
+function songLv(def) { return def.lvBase + DIFF_META[diff].lv; }
+
 function renderSongList() {
   const list = $("songList");
   list.innerHTML = "";
@@ -858,11 +1006,16 @@ function renderSongList() {
     const card = document.createElement("div");
     card.className = "song-card";
     const hs = localStorage.getItem(`nb_hs_${def.id}_${diff}`);
+    const m = DIFF_META[diff];
+    const lvStyle = diff === "god"
+      ? `background:linear-gradient(90deg,#ff5c74,#ffe066,#7dffa9,#4ffcff,#b46bff);color:#111;`
+      : `background:${m.color};`;
     card.innerHTML = `
       <div class="song-emoji">${def.emoji}</div>
       <div class="song-info">
         <div class="song-name">${def.name}</div>
         <div class="song-meta">BPM ${def.bpm}・${def.desc}</div>
+        <span class="song-lv" style="${lvStyle}">${m.label} Lv.${songLv(def)}</span>
         ${hs ? `<div class="song-hs">じこベスト ${Number(hs).toLocaleString()}</div>` : ""}
       </div>`;
     const btn = document.createElement("button");
@@ -871,14 +1024,14 @@ function renderSongList() {
     btn.onclick = () => {
       audio();
       const song = getSong(def);
-      startGame({ id: def.id, name: def.name, song, duration: song.duration, chart: chartFromSong(song, diff) });
+      startGame({ id: def.id, name: def.name, song, duration: song.duration, lv: songLv(def), chart: chartFromSong(song, diff) });
     };
     card.appendChild(btn);
     list.appendChild(card);
   }
 }
 
-// 難易度・速度
+// 難易度切り替え
 document.querySelectorAll(".diff-btn").forEach((b) => {
   b.onclick = () => {
     document.querySelectorAll(".diff-btn").forEach((x) => x.classList.remove("active"));
@@ -888,19 +1041,166 @@ document.querySelectorAll(".diff-btn").forEach((b) => {
     renderSongList();
   };
 });
-$("speedSel").onchange = (e) => {
-  approach = Number(e.target.value);
-  localStorage.setItem("nb_speed", e.target.value);
-};
-
-// 保存された設定を復元
 const savedDiff = localStorage.getItem("nb_diff");
-if (savedDiff && ["easy", "normal", "hard"].includes(savedDiff)) {
+if (savedDiff && DIFFS.includes(savedDiff)) {
   diff = savedDiff;
   document.querySelectorAll(".diff-btn").forEach((x) => x.classList.toggle("active", x.dataset.diff === diff));
 }
-const savedSpeed = localStorage.getItem("nb_speed");
-if (savedSpeed) { approach = Number(savedSpeed); $("speedSel").value = savedSpeed; }
+
+// ────────────────── 設定モーダル ──────────────────
+let settingsOpen = false;
+let prevNotes = [];      // プレビューのノーツ時刻(ctx.currentTime基準)
+let prevRaf = 0, prevSched = 0, prevFeedTimer = 0;
+const prevCanvas = $("prevCanvas");
+const pg = prevCanvas.getContext("2d");
+
+function syncSettingsUI() {
+  $("speedRange").value = SETTINGS.speed;
+  $("speedVal").textContent = Number(SETTINGS.speed).toFixed(1);
+  $("offsetRange").value = SETTINGS.offset;
+  $("offsetVal").textContent = (SETTINGS.offset >= 0 ? "+" : "") + SETTINGS.offset + "ms";
+  document.querySelectorAll(".skin-chip").forEach((c) => c.classList.toggle("active", c.dataset.skin === SETTINGS.skin));
+  $("apToggle").classList.toggle("on", !!SETTINGS.ap);
+}
+
+function openSettings() {
+  audio();
+  settingsOpen = true;
+  syncSettingsUI();
+  $("settingsOverlay").classList.remove("hidden");
+  // プレビューキャンバス初期化
+  const rect = prevCanvas.getBoundingClientRect();
+  prevCanvas.width = rect.width * DPR;
+  prevCanvas.height = 170 * DPR;
+  pg.setTransform(DPR, 0, 0, DPR, 0, 0);
+  prevNotes = [];
+  // 0.75秒間隔でノーツを流す(メトロノーム)
+  prevSched = setInterval(() => {
+    let last = prevNotes.length ? prevNotes[prevNotes.length - 1] : ctx.currentTime + 0.5;
+    while (last < ctx.currentTime + 2.5) {
+      last += 0.75;
+      prevNotes.push(last);
+      INST.tick(last, prevNotes.length % 4 === 0);
+    }
+    prevNotes = prevNotes.filter((t) => t > ctx.currentTime - 2);
+  }, 200);
+  const drawPrev = () => {
+    if (!settingsOpen) return;
+    const w = prevCanvas.getBoundingClientRect().width, h = 170;
+    pg.clearRect(0, 0, w, h);
+    const judgeY = h * 0.78, laneW = 64, cx = w / 2;
+    // レーン
+    pg.fillStyle = "rgba(90,70,200,0.18)";
+    pg.fillRect(cx - laneW / 2, 0, laneW, h);
+    pg.strokeStyle = "rgba(150,150,255,0.3)";
+    pg.strokeRect(cx - laneW / 2, 0, laneW, h);
+    // 判定ライン
+    pg.save();
+    pg.shadowColor = "#4ffcff"; pg.shadowBlur = 10;
+    pg.strokeStyle = "#b7fdff"; pg.lineWidth = 3;
+    pg.beginPath(); pg.moveTo(cx - laneW / 2 - 8, judgeY); pg.lineTo(cx + laneW / 2 + 8, judgeY); pg.stroke();
+    pg.restore();
+    // ノーツ(現在の速さ設定で落下)
+    const ap = approachTime();
+    for (const t of prevNotes) {
+      const p = 1 - (t - ctx.currentTime) / ap;
+      if (p < 0 || p > 1.05) continue;
+      const y = p * judgeY;
+      pg.save();
+      const skin = SETTINGS.skin;
+      if (skin === "classic") {
+        pg.fillStyle = "#4ffcff";
+        pg.fillRect(cx - laneW / 2 + 5, y - 6, laneW - 10, 12);
+        pg.strokeStyle = "#fff"; pg.strokeRect(cx - laneW / 2 + 5, y - 6, laneW - 10, 12);
+      } else if (skin === "crystal") {
+        pg.shadowColor = "#4ffcff"; pg.shadowBlur = 10;
+        pg.fillStyle = "#4ffcff";
+        pg.beginPath();
+        pg.moveTo(cx, y - 12); pg.lineTo(cx + laneW / 2 - 6, y); pg.lineTo(cx, y + 12); pg.lineTo(cx - laneW / 2 + 6, y);
+        pg.closePath(); pg.fill();
+      } else {
+        pg.shadowColor = "#4ffcff"; pg.shadowBlur = 10;
+        pg.fillStyle = "#4ffcff";
+        if (pg.roundRect) {
+          pg.beginPath();
+          pg.roundRect(cx - laneW / 2 + 5, y - 7, laneW - 10, 14, 7);
+          pg.fill();
+          pg.fillStyle = "rgba(255,255,255,.85)";
+          pg.beginPath();
+          pg.roundRect(cx - laneW / 2 + 9, y - 2.5, laneW - 18, 5, 3);
+          pg.fill();
+        } else {
+          pg.fillRect(cx - laneW / 2 + 5, y - 7, laneW - 10, 14);
+        }
+      }
+      pg.restore();
+    }
+    prevRaf = requestAnimationFrame(drawPrev);
+  };
+  drawPrev();
+}
+
+function closeSettings() {
+  settingsOpen = false;
+  clearInterval(prevSched);
+  cancelAnimationFrame(prevRaf);
+  saveSettings();
+  $("settingsOverlay").classList.add("hidden");
+}
+
+function previewTap() {
+  if (!settingsOpen || !prevNotes.length) return;
+  const nowJ = ctx.currentTime - OFF();
+  let best = null, bestA = Infinity;
+  for (const t of prevNotes) {
+    const a = Math.abs(nowJ - t);
+    if (a < bestA) { best = t; bestA = a; }
+  }
+  if (best == null || bestA > 0.3) return;
+  const dt = nowJ - best;
+  const name = judgeName(dt) || (dt < 0 ? "fast" : "slow");
+  const feed = $("prevFeed");
+  const ms = Math.round(dt * 1000);
+  const fsTxt = name === "perfect" ? "" : dt < 0 ? " (FAST)" : " (SLOW)";
+  feed.textContent = `${name.toUpperCase()}${fsTxt} ${ms >= 0 ? "+" : ""}${ms}ms`;
+  feed.className = "prev-feed " + (["perfect", "great", "good"].includes(name) ? name : dt < 0 ? "fast" : "slow");
+  INST.tapSfx(name === "perfect" ? "perfect" : "tap");
+  clearTimeout(prevFeedTimer);
+  prevFeedTimer = setTimeout(() => { feed.innerHTML = "&nbsp;"; }, 900);
+}
+
+$("settingsBtn").onclick = openSettings;
+$("settingsClose").onclick = closeSettings;
+$("settingsSave").onclick = closeSettings;
+$("settingsOverlay").addEventListener("click", (e) => { if (e.target === $("settingsOverlay")) closeSettings(); });
+
+$("speedRange").oninput = (e) => {
+  SETTINGS.speed = Number(e.target.value);
+  $("speedVal").textContent = SETTINGS.speed.toFixed(1);
+};
+$("offsetRange").oninput = (e) => {
+  SETTINGS.offset = Number(e.target.value);
+  $("offsetVal").textContent = (SETTINGS.offset >= 0 ? "+" : "") + SETTINGS.offset + "ms";
+};
+document.querySelectorAll(".skin-chip").forEach((c) => {
+  c.onclick = () => {
+    SETTINGS.skin = c.dataset.skin;
+    document.querySelectorAll(".skin-chip").forEach((x) => x.classList.toggle("active", x === c));
+  };
+});
+$("apToggle").onclick = () => {
+  SETTINGS.ap = !SETTINGS.ap;
+  $("apToggle").classList.toggle("on", SETTINGS.ap);
+};
+prevCanvas.addEventListener("pointerdown", (e) => { e.preventDefault(); previewTap(); });
+
+// 旧設定(nb_speed)からの引っ越し
+const oldSpeed = localStorage.getItem("nb_speed");
+if (oldSpeed && !localStorage.getItem("nb_settings")) {
+  const map = { "2.0": 3, "1.6": 6, "1.2": 8.5, "0.95": 10 };
+  if (map[oldSpeed]) { SETTINGS.speed = map[oldSpeed]; saveSettings(); }
+  localStorage.removeItem("nb_speed");
+}
 
 // ────────────────── 自分の曲 ──────────────────
 $("fileInput").addEventListener("change", async (e) => {

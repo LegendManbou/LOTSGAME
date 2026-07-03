@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
-  <meta name="theme-color" content="#16062e">
+  <meta name="theme-color" content="#070b21">
   <title>NEON BEATS — LOTSGAMEの自作音ゲー</title>
   <meta name="description" content="ブラウザで遊べるオリジナル音ゲー。内蔵曲でも自分の曲でも遊べる!">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎵</text></svg>">
@@ -14,27 +14,21 @@
   <!-- ── 曲選択画面 ── -->
   <div id="selectScreen" class="screen">
     <header class="topbar">
-      <a class="back-btn" href="../">← もどる</a>
+      <a class="back-btn" href="../">←</a>
+      <button id="settingsBtn" class="gear-btn" aria-label="設定">⚙️</button>
       <h1 class="game-logo">NEON<span>BEATS</span></h1>
       <span class="spacer"></span>
     </header>
 
-    <p class="sub">オリジナル曲で遊ぶ音ゲー🎵 スマホはタテ持ちがおすすめ!</p>
+    <p class="sub">夜のセカイで奏でるオリジナル音ゲー🌙 スマホはタテ持ちがおすすめ!</p>
 
     <div class="diff-row" id="diffRow">
-      <button class="diff-btn" data-diff="easy">EASY</button>
-      <button class="diff-btn active" data-diff="normal">NORMAL</button>
-      <button class="diff-btn" data-diff="hard">HARD</button>
-    </div>
-
-    <div class="speed-row">
-      ノーツ速度:
-      <select id="speedSel">
-        <option value="2.0">ゆっくり</option>
-        <option value="1.6" selected>ふつう</option>
-        <option value="1.2">はやい</option>
-        <option value="0.95">めっちゃはやい</option>
-      </select>
+      <button class="diff-btn diff-easy" data-diff="easy">EASY</button>
+      <button class="diff-btn diff-normal active" data-diff="normal">NORMAL</button>
+      <button class="diff-btn diff-hard" data-diff="hard">HARD</button>
+      <button class="diff-btn diff-expert" data-diff="expert">EXPERT</button>
+      <button class="diff-btn diff-master" data-diff="master">MASTER</button>
+      <button class="diff-btn diff-god" data-diff="god">GOD</button>
     </div>
 
     <div id="songList" class="song-list"></div>
@@ -54,6 +48,47 @@
     <p class="credit">音ゲーシステム・楽曲・デザインすべてオリジナル(LOTSGAME自作)。<br>タップ / ⬆フリック / 長おしロングノーツ。PCは D F J K キーでも遊べる!</p>
   </div>
 
+  <!-- ── 設定モーダル ── -->
+  <div id="settingsOverlay" class="overlay hidden">
+    <div class="panel settings-panel">
+      <button id="settingsClose" class="panel-close" aria-label="閉じる">✕</button>
+      <h2>⚙️ 詳細設定</h2>
+
+      <div class="set-row">
+        <div class="set-label">ノーツの速さ <b id="speedVal">6.0</b></div>
+        <input id="speedRange" type="range" min="1" max="12" step="0.5" value="6">
+      </div>
+
+      <div class="set-row">
+        <div class="set-label">タイミング調整 <b id="offsetVal">+0ms</b></div>
+        <input id="offsetRange" type="range" min="-150" max="150" step="5" value="0">
+        <div class="set-hint">SLOWが多いなら「+」へ、FASTが多いなら「−」へ</div>
+      </div>
+
+      <div class="set-row">
+        <div class="set-label">ノーツのスキン</div>
+        <div class="skin-row">
+          <button class="skin-chip" data-skin="neon">ネオン</button>
+          <button class="skin-chip" data-skin="crystal">クリスタル</button>
+          <button class="skin-chip" data-skin="classic">クラシック</button>
+        </div>
+      </div>
+
+      <div class="set-row toggle-row">
+        <div class="set-label">AP演出(オールパーフェクト中の虹ライン)</div>
+        <button id="apToggle" class="toggle"><span></span></button>
+      </div>
+
+      <div class="set-row">
+        <div class="set-label">プレビュー <span class="set-hint-inline">音に合わせてタップ(PCはDキー)で判定チェック!</span></div>
+        <canvas id="prevCanvas"></canvas>
+        <div id="prevFeed" class="prev-feed">&nbsp;</div>
+      </div>
+
+      <button id="settingsSave" class="big-btn">保存して閉じる</button>
+    </div>
+  </div>
+
   <!-- ── ゲーム画面 ── -->
   <div id="gameScreen" class="screen hidden">
     <canvas id="stage"></canvas>
@@ -64,6 +99,7 @@
     </div>
     <div id="comboView" class="combo-view hidden"><span id="comboNum">0</span><small>COMBO</small></div>
     <div id="judgeView" class="judge-view"></div>
+    <div id="fsView" class="fs-view"></div>
     <div id="countdown" class="countdown hidden">3</div>
   </div>
 
@@ -80,6 +116,7 @@
   <!-- ── リザルト ── -->
   <div id="resultScreen" class="overlay hidden">
     <div class="panel result-panel">
+      <div id="resultBanner" class="result-banner hidden"></div>
       <div id="resultRank" class="result-rank">S</div>
       <div id="resultSong" class="result-song"></div>
       <div id="resultScore" class="result-score">0</div>
