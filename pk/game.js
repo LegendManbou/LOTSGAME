@@ -9,12 +9,16 @@ const BALL_R = 0.13;
 const TORSO_Y = 1.05;                    // キーパー胴体の中心高さ
 const RUNUP = 1.15;                      // 助走の秒数(この間に守る準備!)
 const DIVE_DUR = 0.55, DIVE_MAX = GOAL_W; // 飛びこみ(フルスワイプでゴール端から端まで)
-const KEEP_R = 0.66;                     // セーブ判定の胴体半径
-const COLLIDE_D = 0.8;                   // キーパー同士がぶつかる距離
+const COLLIDE_D = 0.8;                   // キーパー同士がぶつかる距離(飛びこみ中のみ)
 const SET_DUR = 6;                       // 配置タイム秒数
 const KICK_TIMEOUT = 12000;              // キッカーが蹴らない時の自動キック
 const KEEPER_X_MAX = GOAL_W / 2 - 0.45;  // スタート位置の左右かぎり
-const SLOT_XS = [[0], [-1.3, 1.3], [-2.1, 0, 2.1], [-2.5, -0.85, 0.85, 2.5]];
+const MAX_KEEPERS = 9, MAX_MEMBERS = 10; // 最大10人(キッカー1+キーパー9)
+const slotXs = (n) => {                  // n人ぶんの初期位置をゴール幅に均等配置
+  if (n <= 1) return [0];
+  const span = 5.7 * (n - 1) / n;
+  return Array.from({ length: n }, (_, i) => -span / 2 + (span * i) / (n - 1));
+};
 
 const flightT = (pow) => 1.0 - 0.5 * pow;            // 強いほど速い
 const arcH = (pow) => (1 - pow) * 1.0 + 0.12;        // 弱いほどふんわり
@@ -166,6 +170,18 @@ function makeAvatar(name, colorIdx, isKeeper) {
   const label = nameSprite(name, "#" + col.toString(16).padStart(6, "0"));
   label.position.y = 1.85;
   g.add(body, head, label);
+  // 顔(キーパーはキッカー向き=+z、キッカーはゴール向き=-z)
+  const fz = isKeeper ? 1 : -1;
+  const eyeMat = new THREE.MeshBasicMaterial({ color: 0x222233 });
+  for (const ex of [-0.06, 0.06]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.028, 8, 8), eyeMat);
+    eye.position.set(ex, 1.39, fz * 0.145);
+    g.add(eye);
+  }
+  const mouth = new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 8), new THREE.MeshBasicMaterial({ color: 0xb0404f }));
+  mouth.scale.set(1.9, 0.65, 0.6);
+  mouth.position.set(0, 1.295, fz * 0.16);
+  g.add(mouth);
   g.userData = { body, head, label, isKeeper };
   scene.add(g);
   return g;
@@ -198,6 +214,9 @@ function fitOrtho() {
   ortho.top = halfH; ortho.bottom = -halfH;
   ortho.updateProjectionMatrix();
 }
+function setFov(f) {
+  if (camera.fov !== f) { camera.fov = f; camera.updateProjectionMatrix(); }
+}
 function updateCamera() {
   const me = myKeeper();
   let cam = camera;
@@ -207,12 +226,14 @@ function updateCamera() {
       ortho.position.set(0, 3.4, -7.5);           // ほんの少しだけ見下ろして地面も見える2D風
       ortho.lookAt(0, 1.5, SPOT_Z);
     } else {
-      // キーパー視点(大): ゴールのうしろ上から
-      camera.position.set(me.x * 0.68, 2.9, -5.4);
-      camera.lookAt(me.x * 0.28, 0.95, SPOT_Z);
+      // キーパー視点(大): ゴールのうしろから望遠ぎみに(遠くのキッカーの顔が見えるように)
+      setFov(40);
+      camera.position.set(me.x * 0.6, 3.1, -8.5);
+      camera.lookAt(me.x * 0.22, 1.05, SPOT_Z);
     }
   } else {
     // キッカー/観戦視点: ボールのうしろから
+    setFov(58);
     camera.position.set(0, 2.7, SPOT_Z + 4.6);
     camera.lookAt(0, 1.15, 0);
   }
@@ -235,36 +256,58 @@ function ballPos(kick, t) {
     SPOT_Z * (1 - s)
   );
 }
+// キーパーのポーズ(足もと基準)— 見た目のアニメと判定で同じ計算を使う
+function divePose(x0, dive, p) {
+  const e = 1 - (1 - p) * (1 - p);
+  return {
+    x: x0 + dive.dx * dive.len * e,
+    y: clamp(dive.dy * dive.len * e * 0.6 - p * p * 0.5, 0, 1.6),
+    rotZ: -Math.sign(dive.dx) * p * 1.25,
+  };
+}
+// ポーズ上の高さhの体の点(rotZで回転)
+function bodyPoint(pose, h) {
+  return { x: pose.x - Math.sin(pose.rotZ) * h, y: pose.y + Math.cos(pose.rotZ) * h };
+}
+// ボールが体(胴体カプセル+頭)にちゃんと当たったかのピンポイント判定
+function ballHitsBody(pose, bp) {
+  const dz = bp.z - KEEPER_Z;
+  const a = bodyPoint(pose, 0.42), b = bodyPoint(pose, 1.08);   // 胴体の軸
+  const abx = b.x - a.x, aby = b.y - a.y;
+  const L2 = abx * abx + aby * aby || 1;
+  const u = clamp(((bp.x - a.x) * abx + (bp.y - a.y) * aby) / L2, 0, 1);
+  const dxy = Math.hypot(bp.x - (a.x + abx * u), bp.y - (a.y + aby * u));
+  if (Math.hypot(dxy, dz) < 0.23 + BALL_R + 0.07) return true;
+  const hd = bodyPoint(pose, 1.35);                              // 頭
+  return Math.hypot(Math.hypot(bp.x - hd.x, bp.y - hd.y), dz) < 0.17 + BALL_R + 0.07;
+}
+
 // kick: {tx,ty,pow,crv} / keepers: [{x, dive:{dx,dy,len,t}|null}] (tはボール発射=0とした秒)
 function simulate(kick, keepers) {
   const T = flightT(kick.pow);
   const dt = 1 / 120;
-  const ks = keepers.map((k) => ({
-    x0: k.x, dive: k.dive, frozenAt: Infinity,
-    pos: new THREE.Vector3(k.x, TORSO_Y, KEEPER_Z),
-  }));
+  const ks = keepers.map((k) => ({ x0: k.x, dive: k.dive, frozenAt: Infinity }));
   const ballP = (t) => ballPos(kick, t);
-  const keeperP = (k, t) => {
-    if (!k.dive) return new THREE.Vector3(k.x0, TORSO_Y, KEEPER_Z);
-    const tEff = Math.min(t, k.frozenAt);
-    const p = clamp((tEff - k.dive.t) / DIVE_DUR, 0, 1);
-    const e = 1 - (1 - p) * (1 - p);
-    return new THREE.Vector3(
-      k.x0 + k.dive.dx * k.dive.len * e,
-      clamp(TORSO_Y + k.dive.dy * k.dive.len * e * 0.75, 0.4, GOAL_H - 0.1),
-      KEEPER_Z
-    );
+  const poseOf = (k, t) => {
+    if (!k.dive) return { x: k.x0, y: 0, rotZ: 0 };
+    const p = clamp((Math.min(t, k.frozenAt) - k.dive.t) / DIVE_DUR, 0, 1);
+    return divePose(k.x0, k.dive, p);
   };
   // キーパー同士の衝突(強い=長いスワイプが勝ち、負けた方はぶつかった所で止まる)
+  // ※移動中(飛ぶ前)の重なりはOK。飛んだ後だけ力関係が働く
   const t0 = Math.min(0, ...ks.filter((k) => k.dive).map((k) => k.dive.t));
   const wasApart = new Map();            // ペアが一度はなれてから当たった時だけ衝突あつかい
   let firstTick = true;
+  const centers = ks.map(() => ({ x: 0, y: 0 }));
   for (let t = t0; t <= T + DIVE_DUR; t += dt) {
-    for (let i = 0; i < ks.length; i++) ks[i].pos.copy(keeperP(ks[i], t));
+    for (let i = 0; i < ks.length; i++) {
+      const c = bodyPoint(poseOf(ks[i], t), 0.75);
+      centers[i].x = c.x; centers[i].y = c.y;
+    }
     for (let i = 0; i < ks.length; i++) for (let j = i + 1; j < ks.length; j++) {
       const a = ks[i], b = ks[j];
-      const key = i * 8 + j;
-      const near = a.pos.distanceTo(b.pos) < COLLIDE_D;
+      const key = i * 16 + j;
+      const near = Math.hypot(centers[i].x - centers[j].x, centers[i].y - centers[j].y) < COLLIDE_D;
       if (near && wasApart.get(key) && !firstTick) {
         const movingA = a.dive && t > a.dive.t && t < a.dive.t + DIVE_DUR && a.frozenAt === Infinity;
         const movingB = b.dive && t > b.dive.t && t < b.dive.t + DIVE_DUR && b.frozenAt === Infinity;
@@ -280,11 +323,11 @@ function simulate(kick, keepers) {
     }
     firstTick = false;
   }
-  // セーブ判定
+  // セーブ判定(体にちゃんと当たった時だけ弾く)
   for (let t = 0; t <= T; t += dt) {
     const bp = ballP(t);
     for (let i = 0; i < ks.length; i++) {
-      if (bp.distanceTo(keeperP(ks[i], t)) < KEEP_R + BALL_R) {
+      if (ballHitsBody(poseOf(ks[i], t), bp)) {
         return { res: "save", by: i, hitT: t, hitPos: bp, frozen: ks.map((k) => k.frozenAt) };
       }
     }
@@ -367,6 +410,11 @@ function createRoom(id) {
     conn.on("data", (msg) => {
       if (!msg || typeof msg !== "object") return;
       if (msg.t === "hello") {
+        if (G.members.length >= MAX_MEMBERS) {          // まんいん(最大10人)
+          conn.send({ t: "full" });
+          setTimeout(() => { try { conn.close(); } catch (_) {} }, 300);
+          return;
+        }
         const mid = net.nextMid++;
         conn._mid = mid;
         net.conns.set(mid, conn);
@@ -413,6 +461,12 @@ function joinRoom(id) {
     conn.on("data", (msg) => {
       if (!msg || typeof msg !== "object") return;
       if (msg.t === "welcome") { G.myMid = msg.mid; return; }
+      if (msg.t === "full") {
+        opened = false;
+        destroyPeer();
+        setRoomStatus(`部屋 ${id} はまんいんだよ(最大10人)`, "err");
+        return;
+      }
       handleMsg(msg);
     });
     conn.on("close", () => {
@@ -471,7 +525,7 @@ const host = {
   },
   needsCpu() {
     const humans = G.members.length - 1;
-    const want = G.cfg.keepers === 0 ? clamp(humans, 1, 4) : G.cfg.keepers;
+    const want = G.cfg.keepers === 0 ? clamp(humans, 1, MAX_KEEPERS) : G.cfg.keepers;
     return want > humans;
   },
   startRound() {
@@ -489,11 +543,12 @@ const host = {
       humansForKeep = G.members.filter((x) => x.mid !== m.mid);
     }
     const want = G.mode === "solo"
-      ? (slot.cpu ? G.cfg.keepers : G.cfg.keepers)
-      : (G.cfg.keepers === 0 ? clamp(G.members.length - 1, 1, 4) : G.cfg.keepers);
+      ? G.cfg.keepers
+      : (G.cfg.keepers === 0 ? clamp(G.members.length - 1, 1, MAX_KEEPERS) : G.cfg.keepers);
     const keepers = [];
-    const xs = SLOT_XS[clamp(want, 1, 4) - 1];
-    for (let i = 0; i < clamp(want, 1, 4); i++) {
+    const n = clamp(want, 1, MAX_KEEPERS);
+    const xs = slotXs(n);
+    for (let i = 0; i < n; i++) {
       const h = humansForKeep[i];
       keepers.push(h
         ? { mid: h.mid, name: h.name, cpu: false, x: xs[i] }
@@ -525,9 +580,10 @@ const host = {
       const delay = RUNUP * 1000 + 100 + Math.random() * 280;
       this.after(delay, () => {
         if (k.dive) return;
+        // 判定がピンポイントになったぶん、当たりを読めた時の精度は少し上げる
         const guess = Math.random() < 0.68;
-        const gx = guess ? G.kick.tx + (Math.random() - 0.5) * 1.1 : (Math.random() - 0.5) * 6;
-        const gy = guess ? G.kick.ty + (Math.random() - 0.5) * 0.7 : Math.random() * 2;
+        const gx = guess ? G.kick.tx + (Math.random() - 0.5) * 0.7 : (Math.random() - 0.5) * 6;
+        const gy = guess ? G.kick.ty + (Math.random() - 0.5) * 0.5 : Math.random() * 2;
         const dx = gx - k.x, dy = gy - TORSO_Y;
         const L = Math.hypot(dx, dy) || 1;
         net.send({ t: "dive", ki: i, dx: dx / L, dy: clamp(dy / L, -0.25, 1), len: clamp(L, 0.6, DIVE_MAX) });
@@ -880,21 +936,18 @@ function animate() {
     const tFly = G.kick ? (now - G.kick.launchAt) / 1000 : -99;
     G.keepers.forEach((k, i) => {
       if (!k.avatar) return;
-      let x = k.x, y = 0, rotZ = 0;
+      let pose = { x: k.x, y: 0, rotZ: 0 };
       if (k.dive) {
-        // アニメは受信時刻ベース(蹴る前に飛んでもちゃんと飛ぶ)
+        // アニメは受信時刻ベース(蹴る前に飛んでもちゃんと飛ぶ)。判定と同じdivePoseを使う
         let p = clamp((now - k.diveAtMs) / 1000 / DIVE_DUR, 0, 1);
         const frozenAt = sim ? sim.frozen[i] : Infinity;
         if (frozenAt !== Infinity && k.dive.t != null) {
           p = Math.min(p, clamp((frozenAt - k.dive.t) / DIVE_DUR, 0, 1));  // ぶつかった所で止まる
         }
-        const e = 1 - (1 - p) * (1 - p);
-        x = k.x + k.dive.dx * k.dive.len * e;
-        y = clamp(k.dive.dy * k.dive.len * e * 0.6 - p * p * 0.5, 0, 1.6);   // バーより上には行かない
-        rotZ = -Math.sign(k.dive.dx) * p * 1.25;
+        pose = divePose(k.x, k.dive, p);
       }
-      k.avatar.position.set(x, y, KEEPER_Z);
-      k.avatar.rotation.z = rotZ;
+      k.avatar.position.set(pose.x, pose.y, KEEPER_Z);
+      k.avatar.rotation.z = pose.rotZ;
     });
 
     // キッカーの助走
@@ -1020,4 +1073,4 @@ $("lobbyBtn").onclick = () => {
 addEventListener("beforeunload", () => destroyPeer());
 
 // デバッグ用(コンソールから状態確認できるように)
-window.__npk = { G, handleMsg, host, net, simulate, ballPos, swipeFx, getCamView: () => camView };
+window.__npk = { G, handleMsg, host, net, simulate, ballPos, ballHitsBody, divePose, slotXs, swipeFx, getCamView: () => camView };
