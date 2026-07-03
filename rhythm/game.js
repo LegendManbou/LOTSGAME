@@ -144,18 +144,18 @@ const DIFF_META = {
   easy:   { label: "EASY",   color: "#46d275", lv: 2 },
   normal: { label: "NORMAL", color: "#38b6ff", lv: 8 },
   hard:   { label: "HARD",   color: "#ffb020", lv: 15 },
-  expert: { label: "EXPERT", color: "#ff5c74", lv: 21 },
-  master: { label: "MASTER", color: "#b46bff", lv: 26 },
-  god:    { label: "GOD",    color: "#ffffff", lv: 31 },
+  expert: { label: "EXPERT", color: "#ff5c74", lv: 24 },
+  master: { label: "MASTER", color: "#b46bff", lv: 27 },
+  god:    { label: "GOD",    color: "#ffffff", lv: 30 },
 };
 // 譜面の密度パラメータ
 const DIFF_PARAMS = {
   easy:   { gap: 0.50,  kick: 0,   snare: 0,    hat: 0,    bass: 0,   dbl: 0,    flick: false },
   normal: { gap: 0.30,  kick: 0.3, snare: 0,    hat: 0,    bass: 0,   dbl: 0,    flick: true  },
   hard:   { gap: 0.19,  kick: 1,   snare: 0.35, hat: 0,    bass: 0,   dbl: 0,    flick: true  },
-  expert: { gap: 0.14,  kick: 1,   snare: 0.85, hat: 0.25, bass: 0,   dbl: 0.08, flick: true  },
-  master: { gap: 0.105, kick: 1,   snare: 1,    hat: 0.55, bass: 0,   dbl: 0.16, flick: true  },
-  god:    { gap: 0.075, kick: 1,   snare: 1,    hat: 0.9,  bass: 0.5, dbl: 0.30, flick: true  },
+  expert: { gap: 0.105, kick: 1,   snare: 1,    hat: 0.55, bass: 0,   dbl: 0.16, flick: true  },
+  master: { gap: 0.075, kick: 1,   snare: 1,    hat: 0.9,  bass: 0.5, dbl: 0.30, flick: true  },
+  god:    { gap: 0.058, kick: 1,   snare: 1,    hat: 1,    bass: 0.8, dbl: 0.42, flick: true  },
 };
 
 // ────────────────── 内蔵曲(自動作曲) ──────────────────
@@ -243,17 +243,20 @@ function chartFromSong(song, dif) {
   let lastT = -9;
   const lastLaneT = [-9, -9, -9, -9];
 
-  const laneFree = (l, t) => t - lastLaneT[l] >= Math.max(P.gap, 0.22);
+  const laneGap = dif === "god" ? 0.16 : 0.22;
+  const laneFree = (l, t) => t - lastLaneT[l] >= Math.max(P.gap, laneGap);
 
   const push = (t, lane, type, dur, canDouble) => {
     if (t - lastT < P.gap && type !== "hold") return false;
+    const chordSize = notes.reduce((count, n) => count + (Math.abs(n.t - t) < 0.0001 ? 1 : 0), 0);
+    if (chordSize >= 2) return false;
     for (let k = 0; k < 4; k++) {
       const l = (lane + k) % 4;
       if (laneFree(l, t)) {
         notes.push({ t, lane: l, type, dur: dur || 0 });
         lastT = t; lastLaneT[l] = type === "hold" ? t + dur : t;
         // 同時押し(高難易度のみ)
-        if (canDouble && P.dbl > 0 && Math.random() < P.dbl && type !== "hold") {
+        if (chordSize === 0 && canDouble && P.dbl > 0 && Math.random() < P.dbl && type !== "hold") {
           const l2 = (l + 2) % 4;
           if (laneFree(l2, t)) {
             notes.push({ t, lane: l2, type, dur: 0 });
@@ -284,7 +287,7 @@ function chartFromSong(song, dif) {
   }
 
   // MASTER/GOD: 16分音符ラッシュを敷きつめる(GODは神の領域)
-  const rushP = dif === "god" ? 0.65 : dif === "master" ? 0.14 : 0;
+  const rushP = dif === "god" ? 0.9 : dif === "master" ? 0.65 : dif === "expert" ? 0.14 : 0;
   if (rushP > 0) {
     const bars = song.def.bars;
     const s16 = spb / 4;
@@ -302,10 +305,87 @@ function chartFromSong(song, dif) {
         for (const n of notes) {
           if (n.lane !== l) continue;
           const end = n.type === "hold" ? n.t + n.dur : n.t;
-          if (t > n.t - 0.22 && t < end + 0.22) { free = false; break; }
+          if (t > n.t - laneGap && t < end + laneGap) { free = false; break; }
         }
         if (free) { notes.push({ t, lane: l, type: "tap", dur: 0 }); break; }
       }
+    }
+  }
+
+  // Keep the slid recipes in their intended density bands on faster songs.
+  if (dif === "expert" || dif === "master") {
+    const targetNps = dif === "expert" ? 5 : 8;
+    const chartStart = Math.min(...notes.map((n) => n.t));
+    const chartEnd = Math.max(...notes.map((n) => n.t));
+    const targetNotes = Math.floor(targetNps * (chartEnd - chartStart));
+    const removeCount = Math.max(0, notes.length - targetNotes);
+    if (removeCount > 0) {
+      const removable = notes
+        .map((n, i) => ({ n, i }))
+        .filter(({ n }) => n.type !== "hold" && n.t !== chartStart && n.t !== chartEnd)
+        .map(({ i }) => i);
+      const rng = mulberry32(song.def.seed * 53 + (dif === "expert" ? 24 : 27));
+      for (let i = removable.length - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        [removable[i], removable[j]] = [removable[j], removable[i]];
+      }
+      const remove = new Set(removable.slice(0, removeCount));
+      for (let i = notes.length - 1; i >= 0; i--) if (remove.has(i)) notes.splice(i, 1);
+    }
+  }
+
+  if (dif === "god") {
+    const godScale = clamp((song.def.lvBase - 3) / 6, 0, 1);
+    const targetNps = 9.5 + 3 * godScale;
+    const start = 2 * 4 * spb;
+    const end = (song.def.bars - 2) * 4 * spb;
+    const chartStart = Math.min(...notes.map((n) => n.t));
+    const chartEnd = Math.max(...notes.map((n) => n.t));
+    const targetNotes = Math.floor(targetNps * (chartEnd - chartStart));
+    const s24 = spb / 6;
+    const rng = mulberry32(song.def.seed * 97 + 39);
+
+    const canPlace = (lane, t) => {
+      let sameTime = 0;
+      for (const n of notes) {
+        if (Math.abs(n.t - t) < 0.0001) sameTime++;
+        if (n.lane !== lane) continue;
+        const noteEnd = n.type === "hold" ? n.t + n.dur : n.t;
+        if (t > n.t - laneGap && t < noteEnd + laneGap) return false;
+      }
+      return sameTime < 2;
+    };
+
+    const addAt = (t, allowDouble) => {
+      const lane0 = Math.floor(rng() * 4);
+      let firstLane = -1;
+      for (let k = 0; k < 4; k++) {
+        const lane = (lane0 + k) % 4;
+        if (!canPlace(lane, t)) continue;
+        const phraseBurst = Math.floor((t - start) / spb) % 16 >= 14;
+        const flickP = 0.2 + 0.35 * godScale;
+        notes.push({ t, lane, type: phraseBurst || rng() < flickP ? "flick" : "tap", dur: 0 });
+        firstLane = lane;
+        break;
+      }
+      if (firstLane < 0 || !allowDouble || notes.length >= targetNotes) return;
+      const lane2 = (firstLane + 2) % 4;
+      const doubleP = 0.18 + 0.32 * godScale;
+      if (rng() < doubleP && canPlace(lane2, t)) notes.push({ t, lane: lane2, type: "tap", dur: 0 });
+    };
+
+    // Spread additions across the full song; lower levels still favor phrase-end bursts.
+    const candidates = [];
+    for (let t = start; t < end; t += s24) {
+      const beatInPhrase = Math.floor((t - start) / spb) % 16;
+      const phraseWeight = beatInPhrase >= 14 ? 4 : godScale >= 0.5 && beatInPhrase >= 10 ? 2 : 1;
+      const weight = godScale === 1 ? 1 : phraseWeight;
+      candidates.push({ t, priority: rng() / weight });
+    }
+    candidates.sort((a, b) => a.priority - b.priority);
+    for (const candidate of candidates) {
+      if (notes.length >= targetNotes) break;
+      addAt(candidate.t, true);
     }
   }
 
@@ -349,8 +429,8 @@ async function analyzeAudio(buffer, dif, onProgress) {
   }
   // 適応しきい値(±0.75秒の平均+偏差)
   const W = Math.round(0.75 / (hop / sr));
-  const minGap = { easy: 0.46, normal: 0.3, hard: 0.19, expert: 0.14, master: 0.11, god: 0.08 }[dif];
-  const sdMul = { easy: 1.25, normal: 1.25, hard: 1.15, expert: 1.0, master: 0.9, god: 0.72 }[dif];
+  const minGap = { easy: 0.46, normal: 0.3, hard: 0.19, expert: 0.11, master: 0.08, god: 0.058 }[dif];
+  const sdMul = { easy: 1.25, normal: 1.25, hard: 1.15, expert: 0.9, master: 0.72, god: 0.55 }[dif];
   const dblP = DIFF_PARAMS[dif].dbl;
   const notes = [];
   let lastT = -9, lastLane = 0, strongCount = 0;
@@ -387,8 +467,9 @@ async function analyzeAudio(buffer, dif, onProgress) {
         type = "hold"; dur = clamp(dif === "easy" ? 1.0 : 0.8, 0.5, 2.2);
       }
     }
-    if (t - lastLaneT[lane] < 0.22) lane = (lane + 2) % 4;
-    if (t - lastLaneT[lane] < 0.22) continue;
+    const laneGap = dif === "god" ? 0.16 : 0.22;
+    if (t - lastLaneT[lane] < laneGap) lane = (lane + 2) % 4;
+    if (t - lastLaneT[lane] < laneGap) continue;
     if (t < 1.2) continue; // 曲頭は空ける
 
     notes.push({ t, lane, type, dur });
@@ -397,7 +478,7 @@ async function analyzeAudio(buffer, dif, onProgress) {
     // 高難易度: 強い音で同時押し
     if (dblP > 0 && strong && type === "tap" && Math.random() < dblP) {
       const l2 = (lane + 2) % 4;
-      if (t - lastLaneT[l2] >= 0.22) {
+      if (t - lastLaneT[l2] >= laneGap) {
         notes.push({ t, lane: l2, type: "tap", dur: 0 });
         lastLaneT[l2] = t;
       }
