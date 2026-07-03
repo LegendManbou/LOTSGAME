@@ -34,7 +34,8 @@ const roomStatus = $("roomStatus"), leaveBtn = $("leaveRoomBtn");
 let activeCat = "all";
 
 function faviconUrl(gameUrl) {
-  const host = new URL(gameUrl).hostname;
+  const host = new URL(gameUrl, location.href).hostname;
+  if (host === location.hostname) return null; // サイト内の自作ゲームはファビコン不要
   return `https://www.google.com/s2/favicons?domain=${host}&sz=128`;
 }
 
@@ -70,25 +71,34 @@ function renderGrid() {
     emoji.textContent = g.emoji;
     thumb.appendChild(emoji);
 
-    // 画像: OGPサムネ → ファビコン → 絵文字カード
-    const og = (typeof THUMBS !== "undefined" && THUMBS[g.id]) || "";
+    // 画像: 自作サムネ/OGPサムネ → ファビコン → 絵文字カード
+    const og = g.img || (typeof THUMBS !== "undefined" && THUMBS[g.id]) || "";
+    const fav = faviconUrl(g.url);
     const img = document.createElement("img");
     img.loading = "lazy";
     img.alt = "";
     img.onerror = () => {
-      if (img.src !== faviconUrl(g.url)) {
+      if (fav && img.src !== fav) {
         img.style.objectFit = "contain";
         img.style.inset = "18%";
         img.style.width = "64%";
         img.style.height = "64%";
-        img.src = faviconUrl(g.url);
+        img.src = fav;
       } else {
         img.remove();
       }
     };
-    img.src = og || faviconUrl(g.url);
-    if (!og) { img.style.objectFit = "contain"; img.style.inset = "18%"; img.style.width = "64%"; img.style.height = "64%"; }
-    thumb.appendChild(img);
+    if (og || fav) {
+      img.src = og || fav;
+      if (!og) { img.style.objectFit = "contain"; img.style.inset = "18%"; img.style.width = "64%"; img.style.height = "64%"; }
+      thumb.appendChild(img);
+    }
+    if (g.badge) {
+      const bd = document.createElement("span");
+      bd.className = "card-badge";
+      bd.textContent = g.badge;
+      thumb.appendChild(bd);
+    }
 
     const body = document.createElement("div");
     body.className = "card-body";

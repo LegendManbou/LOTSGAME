@@ -10,7 +10,8 @@ const src = readFileSync(join(root, "js", "games.js"), "utf8");
 const ctx = {};
 vm.createContext(ctx);
 vm.runInContext(src + "\n;__games = GAMES;", ctx);
-const games = ctx.__games;
+// サイト内の自作ゲーム(相対URL・img指定あり)は対象外
+const games = ctx.__games.filter((g) => /^https?:/.test(g.url) && !g.img);
 
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
 

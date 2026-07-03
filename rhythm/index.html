@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#16062e">
+  <title>NEON BEATS — LOTSGAMEの自作音ゲー</title>
+  <meta name="description" content="ブラウザで遊べるオリジナル音ゲー。内蔵曲でも自分の曲でも遊べる!">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎵</text></svg>">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ── 曲選択画面 ── -->
+  <div id="selectScreen" class="screen">
+    <header class="topbar">
+      <a class="back-btn" href="../">← もどる</a>
+      <h1 class="game-logo">NEON<span>BEATS</span></h1>
+      <span class="spacer"></span>
+    </header>
+
+    <p class="sub">オリジナル曲で遊ぶ音ゲー🎵 スマホはタテ持ちがおすすめ!</p>
+
+    <div class="diff-row" id="diffRow">
+      <button class="diff-btn" data-diff="easy">EASY</button>
+      <button class="diff-btn active" data-diff="normal">NORMAL</button>
+      <button class="diff-btn" data-diff="hard">HARD</button>
+    </div>
+
+    <div class="speed-row">
+      ノーツ速度:
+      <select id="speedSel">
+        <option value="2.0">ゆっくり</option>
+        <option value="1.6" selected>ふつう</option>
+        <option value="1.2">はやい</option>
+        <option value="0.95">めっちゃはやい</option>
+      </select>
+    </div>
+
+    <div id="songList" class="song-list"></div>
+
+    <div class="song-card custom-card">
+      <div class="song-emoji">📂</div>
+      <div class="song-info">
+        <div class="song-name">自分の曲で遊ぶ</div>
+        <div class="song-meta">スマホ/PCの音楽ファイル(mp3など)から譜面を自動生成!曲はどこにも送信されないよ</div>
+      </div>
+      <label class="play-btn" for="fileInput">えらぶ</label>
+      <input id="fileInput" type="file" accept="audio/*" hidden>
+    </div>
+
+    <p id="analyzeStatus" class="analyze-status"></p>
+
+    <p class="credit">音ゲーシステム・楽曲・デザインすべてオリジナル(LOTSGAME自作)。<br>タップ / ⬆フリック / 長おしロングノーツ。PCは D F J K キーでも遊べる!</p>
+  </div>
+
+  <!-- ── ゲーム画面 ── -->
+  <div id="gameScreen" class="screen hidden">
+    <canvas id="stage"></canvas>
+    <div class="hud">
+      <button id="pauseBtn" class="pause-btn">❚❚</button>
+      <div class="progress"><div id="progFill"></div></div>
+      <div id="scoreView" class="score-view">0</div>
+    </div>
+    <div id="comboView" class="combo-view hidden"><span id="comboNum">0</span><small>COMBO</small></div>
+    <div id="judgeView" class="judge-view"></div>
+    <div id="countdown" class="countdown hidden">3</div>
+  </div>
+
+  <!-- ── ポーズ ── -->
+  <div id="pauseOverlay" class="overlay hidden">
+    <div class="panel">
+      <h2>ひとやすみ</h2>
+      <button id="resumeBtn" class="big-btn">▶ つづける</button>
+      <button id="retryBtn" class="big-btn ghost">🔄 さいしょから</button>
+      <button id="quitBtn" class="big-btn ghost">🎵 曲えらびへ</button>
+    </div>
+  </div>
+
+  <!-- ── リザルト ── -->
+  <div id="resultScreen" class="overlay hidden">
+    <div class="panel result-panel">
+      <div id="resultRank" class="result-rank">S</div>
+      <div id="resultSong" class="result-song"></div>
+      <div id="resultScore" class="result-score">0</div>
+      <div id="resultNew" class="result-new hidden">✨ じこベスト!</div>
+      <table class="result-table">
+        <tr><td class="jp perfect">PERFECT</td><td id="cPerfect">0</td></tr>
+        <tr><td class="jp great">GREAT</td><td id="cGreat">0</td></tr>
+        <tr><td class="jp good">GOOD</td><td id="cGood">0</td></tr>
+        <tr><td class="jp miss">MISS</td><td id="cMiss">0</td></tr>
+        <tr><td class="jp combo">MAX COMBO</td><td id="cCombo">0</td></tr>
+      </table>
+      <button id="resultRetryBtn" class="big-btn">🔄 もういちど</button>
+      <button id="resultBackBtn" class="big-btn ghost">🎵 曲えらびへ</button>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>

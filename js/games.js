@@ -114,6 +114,9 @@ const GAMES = [
   { id: "2048", name: "2048", url: "https://play2048.co", desc: "定番スライドパズル", players: "1人", cat: "solo", emoji: "🔢" },
   { id: "slowroads", name: "Slow Roads", url: "https://slowroads.io", desc: "無限に続く道をチルドライブ", players: "1人", cat: "solo", emoji: "🚗" },
   { id: "neal", name: "Neal.fun", url: "https://neal.fun", desc: "不思議おもしろ実験サイト集", players: "1人", cat: "solo", emoji: "🌀" },
+
+  // ── 作ったゲーム(LOTSGAME自作・100本目〜) ──────────────
+  { id: "neonbeats", name: "NEON BEATS", url: "rhythm/", desc: "プロセカ風の自作音ゲー!自分の曲でも遊べる", players: "1人", cat: "made", emoji: "🎵", img: "rhythm/thumb.svg", badge: "NEW" },
 ];
 
 const CATS = {
@@ -124,4 +127,5 @@ const CATS = {
   io:      { label: ".io対戦",       color: "#4fc3f7" },
   shooter: { label: "シューター",    color: "#ff5c5c" },
   solo:    { label: "1人でも神ゲー", color: "#26c6da" },
+  made:    { label: "作ったゲーム",   color: "#e879ff" },
 };

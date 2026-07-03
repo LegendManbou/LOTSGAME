@@ -175,6 +175,19 @@ body {
   height: 100%;
   object-fit: cover;
 }
+.card-badge {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  z-index: 2;
+  background: linear-gradient(135deg, #ffe066, #ff6b9d);
+  color: #12121f;
+  font-size: 8.5px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  padding: 2px 6px;
+  border-radius: 999px;
+}
 .thumb .emoji-fallback {
   font-size: 34px;
   line-height: 1;
