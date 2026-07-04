@@ -122,6 +122,8 @@ body {
   scrollbar-width: none;
 }
 .cat-filter::-webkit-scrollbar { display: none; }
+.sub-filter { padding-top: 0; }
+.sub-filter .cat-chip { font-size: 11px; padding: 5px 10px; }
 .cat-chip {
   flex: 0 0 auto;
   border: 1.5px solid #35355a;

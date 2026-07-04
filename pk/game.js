@@ -779,6 +779,12 @@ const host = {
   addCycle() {
     this.order.push(...this.buildCycleChunks());
   },
+  // ゲーム中⚙: のこり周(本)数を組みなおす(交代制・なん本勝負の途中変更)
+  setRemainingCycles(n) {
+    if (G.phase === "lobby" || G.phase === "final") return;
+    this.order = this.order.slice(0, this.roundNo);
+    for (let i = 0; i < n; i++) this.order.push(...this.buildCycleChunks());
+  },
   // ゲーム中⚙: 待機中メンバーを次のラウンドから参加させる
   admit(mid) {
     const m = G.members.find((x) => x.mid === mid);
@@ -1404,6 +1410,14 @@ bindGpChip("gpSetDur", "advSetDur", (v) => { G.cfg.setDur = v; });
 bindGpChip("gpKickLimit", "advKickLimit", (v) => { G.cfg.kickLimit = v; });
 bindGpChip("gpCpu", "advCpu", (v) => { G.cfg.cpuLevel = v; });
 bindGpChip("gpSudden", "advSudden", (v) => { G.cfg.sudden = !!v; });
+// ゲーム中⚙: なん本勝負・交代周数の途中変更(ロビーのチップとも同期)
+chipRow("gpCycles", (v) => {
+  if (!isDirector()) return;
+  host.setRemainingCycles(v);
+  if (G.mode === "solo") { G.cfg.rounds = v; syncChips("soloRounds", v); }
+  else { G.cfg.cycles = v; syncChips("roomCycles", v); }
+  $("gpInfo").textContent = `のこり ${v}周に組みなおしたよ!(ぜんぶで ${host.order.length} ラウンド)`;
+});
 
 // チーム分け(ホストがロビーでタップして振り分け)
 const teamOf = new Map();   // mid -> 0..3 | undefined

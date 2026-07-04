@@ -20,11 +20,22 @@ const GAMES = [
   { id: "haxball", name: "HaxBall", url: "https://www.haxball.com", desc: "みんなでゆるサッカー。部屋作成可", players: "2〜12人", cat: "party", emoji: "🥅" },
   { id: "lounge", name: "ラウンジ(終われまてん)", url: "https://loungegame.site", desc: "「一致するまで終われまテン」など配信者定番パーティー集", players: "2人〜", cat: "party", emoji: "🛋️" },
   { id: "ngword", name: "NGワード(ラウンジ)", url: "https://loungegame.site", desc: "頭の上のNGワードを相手に言わせたら勝ち!", players: "2人〜", cat: "party", emoji: "🙊" },
-  { id: "kahoot", name: "Kahoot!", url: "https://kahoot.it", desc: "世界定番のクイズ大会。PINだけで参加", players: "何人でも", cat: "party", emoji: "❓" },
-  { id: "jackbox", name: "Jackbox Games", url: "https://jackbox.tv", desc: "実況者御用達パーティー集(参加はブラウザ無料)", players: "〜10人", cat: "party", emoji: "📦" },
-  { id: "drawaria", name: "Drawaria.online", url: "https://drawaria.online", desc: "お絵かき当て+自由らくがき部屋", players: "〜30人", cat: "party", emoji: "🖼️" },
-  { id: "bpp", name: "Broken Picture Phone", url: "https://www.brokenpicturephone.com", desc: "絵の伝言ゲーム。ガーティック系の自由版", players: "3人〜", cat: "party", emoji: "📞" },
-  { id: "betrayal", name: "Betrayal.io", url: "https://betrayal.io", desc: "Among Us風の裏切り者探しをブラウザで", players: "〜12人", cat: "mystery", emoji: "🔪" },
+  { id: "kahoot", name: "Kahoot!", url: "https://kahoot.it", desc: "世界定番のクイズ大会。PINだけで参加", players: "何人でも", cat: "party", emoji: "❓", img: "img/thumbs/kahoot.svg" },
+  { id: "jackbox", name: "Jackbox Games", url: "https://jackbox.tv", desc: "実況者御用達パーティー集(参加はブラウザ無料)", players: "〜10人", cat: "party", emoji: "📦", img: "img/thumbs/jackbox.svg" },
+  { id: "drawaria", name: "Drawaria.online", url: "https://drawaria.online", desc: "お絵かき当て+自由らくがき部屋", players: "〜30人", cat: "party", emoji: "🖼️", img: "img/thumbs/drawaria.svg" },
+  { id: "bpp", name: "Broken Picture Phone", url: "https://www.brokenpicturephone.com", desc: "絵の伝言ゲーム。ガーティック系の自由版", players: "3人〜", cat: "party", emoji: "📞", img: "img/thumbs/bpp.svg" },
+  { id: "betrayal", name: "Betrayal.io", url: "https://betrayal.io", desc: "Among Us風の裏切り者探しをブラウザで", players: "〜12人", cat: "mystery", emoji: "🔪", img: "img/thumbs/betrayal.svg" },
+  { id: "gamebuddies", name: "GameBuddies.io", url: "https://gamebuddies.io", desc: "クイズ・お絵かき等16種。配信チャット連携も", players: "2人〜", cat: "party", emoji: "🎪" },
+  { id: "gamingcouch", name: "Gaming Couch", url: "https://gamingcouch.com", desc: "スマホがコントローラーになるパーティー集", players: "1〜8人", cat: "party", emoji: "📱" },
+  { id: "latelate", name: "らてらて", url: "https://late-late.jp", desc: "ウミガメのスープ(水平思考)をみんなで出題・推理", players: "2人〜", cat: "mystery", emoji: "🐢" },
+  { id: "ccfolia", name: "ココフォリア", url: "https://ccfolia.com", desc: "TRPG・マダミスのオンライン卓の定番", players: "2〜8人", cat: "mystery", emoji: "🎭" },
+
+  // ── 謎解き・協力 ──────────────────────────────────────
+  { id: "beespiel", name: "ビーシュピール", url: "https://beespiel.net", desc: "無料の協力謎解き専門サイト。通話しながら◎", players: "2〜4人", cat: "escape", emoji: "🧩" },
+  { id: "gakuyume", name: "学園祭の夢を見る。", url: "https://gakuyume.web.app", desc: "無料長編!学園祭が舞台の本格協力謎解き", players: "1〜6人", cat: "escape", emoji: "🏫" },
+  { id: "dasshutsu", name: "脱出ゲームメーカー", url: "https://dasshutsu.games", desc: "みんなが作った脱出ゲームが遊び放題", players: "1人〜", cat: "escape", emoji: "🚪" },
+  { id: "enchambered", name: "Enchambered", url: "https://enchambered.com/puzzles/", desc: "2人が別画面を見て協力する脱出(英語)", players: "2人", cat: "escape", emoji: "🔒" },
+  { id: "nazohiroba", name: "ナゾヒロバ", url: "https://nazohiroba.com", desc: "オンライン謎解きの巨大ポータル。無料も多数", players: "1人〜", cat: "escape", emoji: "🔍" },
 
   // ── 人狼・推理 ──────────────────────────────────────
   { id: "ruru", name: "るる鯖 人狼", url: "https://ruru-jinro.net", desc: "日本語で遊べる本格オンライン人狼", players: "5人〜", cat: "mystery", emoji: "🐺" },
@@ -57,6 +68,7 @@ const GAMES = [
   { id: "cardgamesio", name: "CardGames.io", url: "https://cardgames.io", desc: "大富豪・ハーツなど定番カード集", players: "1〜4人", cat: "board", emoji: "♠️" },
   { id: "playok", name: "PlayOK", url: "https://www.playok.com/ja/", desc: "リバーシ等、世界の定番ゲーム対戦", players: "2〜4人", cat: "board", emoji: "⚫" },
   { id: "lichess", name: "Lichess", url: "https://lichess.org", desc: "完全無料・広告なしのチェス", players: "2人", cat: "board", emoji: "♞" },
+  { id: "chesscom", name: "Chess.com", url: "https://www.chess.com/ja", desc: "世界最大のチェス。変則ルールや友達対戦も", players: "2人", cat: "board", emoji: "♟️" },
   { id: "lishogi", name: "Lishogi", url: "https://lishogi.org", desc: "完全無料の将棋(Lichessの将棋版)", players: "2人", cat: "board", emoji: "🗾" },
   { id: "ogs", name: "Online-Go (OGS)", url: "https://online-go.com", desc: "世界と打てる囲碁", players: "2人", cat: "board", emoji: "⚪" },
   { id: "hanab", name: "Hanab.live", url: "https://hanab.live", desc: "協力型カードゲーム「花火」", players: "2〜6人", cat: "board", emoji: "🎆" },
@@ -114,6 +126,7 @@ const GAMES = [
   { id: "tetrio", name: "TETR.IO", url: "https://tetr.io", desc: "ガチ対戦テトリス(99人戦あり)", players: "1〜99人", cat: "shooter", emoji: "🟦" },
   { id: "jstris", name: "Jstris", url: "https://jstris.jezevec10.com", desc: "シンプル爆速の対戦テトリス", players: "1人〜", cat: "shooter", emoji: "🧩" },
   { id: "geofs", name: "GeoFS", url: "https://www.geo-fs.com", desc: "無料フライトシム。世界と同じ空を飛ぶ", players: "大人数", cat: "shooter", emoji: "✈️" },
+  { id: "deadshot", name: "Deadshot.io", url: "https://deadshot.io", desc: "いま海外で大人気の軽快対戦FPS", players: "大人数", cat: "shooter", emoji: "🎯" },
 
   // ── 1人でも神ゲー ────────────────────────────────────
   { id: "quickdraw", name: "Quick, Draw!", url: "https://quickdraw.withgoogle.com", desc: "AIがお絵かきを20秒で当てる", players: "1人", cat: "solo", emoji: "⏱️" },
@@ -134,6 +147,7 @@ const CATS = {
   board:   { label: "ボード・カード", color: "#2ecc71" },
   io:      { label: ".io対戦",       color: "#4fc3f7" },
   shooter: { label: "シューター",    color: "#ff5c5c" },
+  escape:  { label: "謎解き・協力",   color: "#a3e635" },
   solo:    { label: "1人でも神ゲー", color: "#26c6da" },
   best:    { label: "みんなで遊ぶ神ゲー", color: "#ffcf4d" },
   made:    { label: "作ったゲーム",   color: "#e879ff" },
@@ -141,15 +155,16 @@ const CATS = {
 
 // ── みんなで遊ぶ神ゲー ランキング(実際に盛り上がると実証済みの順・実況者の定番が上位) ──
 const BEST = [
-  "gartic-phone", "lounge", "ngword", "skribbl", "jklm", "makeitmeme", "onuw", "ruru", "smashkarts", "deathbyai",
-  "codenames", "spyfall", "betrayal", "justfall", "gooberdash", "stumbleguys", "bonk", "haxball", "drawaria", "gartic-io",
-  "drawasaurus", "sketchful", "bpp", "stopots", "jackbox", "kahoot", "geoguessr", "openguessr", "cityguesser", "bga",
-  "colonist", "richup", "pokernow", "avalon", "secretdictator", "loveletter", "longwave", "wolvesville", "zombsroyale", "survev",
-  "shellshock", "krunker", "1v1lol", "voxiom", "kirka", "venge", "warbrokers", "narrowone", "repuls", "bloxd",
+  "gartic-phone", "lounge", "ngword", "skribbl", "jklm", "makeitmeme", "onuw", "ruru", "latelate", "smashkarts",
+  "deathbyai", "codenames", "beespiel", "spyfall", "betrayal", "justfall", "gooberdash", "stumbleguys", "bonk", "haxball",
+  "drawaria", "gartic-io", "gamebuddies", "drawasaurus", "sketchful", "bpp", "gakuyume", "stopots", "jackbox", "kahoot",
+  "geoguessr", "openguessr", "cityguesser", "ccfolia", "bga", "colonist", "richup", "pokernow", "avalon", "secretdictator",
+  "loveletter", "longwave", "wolvesville", "dasshutsu", "enchambered", "nazohiroba", "gamingcouch", "zombsroyale", "survev", "shellshock",
+  "krunker", "deadshot", "1v1lol", "voxiom", "kirka", "venge", "warbrokers", "narrowone", "repuls", "bloxd",
   "mcclassic", "drednot", "tetrio", "jstris", "typeracer", "nitrotype", "protobowl", "jeopardylabs", "rocketbot", "basketbros",
   "tagpro", "curvefever", "slither", "agar", "paperio2", "splix", "superhex", "powerline", "territorial", "openfront",
   "generals", "diep", "arras", "digdig", "yohoho", "gats", "defly", "starblast", "evades", "moomoo",
   "zombs", "starve", "taming", "florr", "deeeep", "mope", "lbs", "wormate", "playingcards", "cardgamesio",
-  "playok", "setwf", "hanab", "dominion", "papergames", "lichess", "lishogi", "ogs", "geofs",
+  "playok", "chesscom", "setwf", "hanab", "dominion", "papergames", "lichess", "lishogi", "ogs", "geofs",
 ];
 BEST.forEach((id, i) => { const g = GAMES.find((x) => x.id === id); if (g) g.best = i + 1; });

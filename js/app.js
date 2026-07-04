@@ -52,9 +52,30 @@ function renderFilter() {
   }
 }
 
+// 「みんなで遊ぶ神ゲー」の中のジャンル絞りこみ
+let bestSub = "all";
+function renderSubFilter() {
+  const bar = $("subFilter");
+  bar.classList.toggle("hidden", activeCat !== "best");
+  if (activeCat !== "best") return;
+  bar.innerHTML = "";
+  const subs = [["all", { label: "ぜんぶ", color: "#ffcf4d" }],
+    ...Object.entries(CATS).filter(([k]) => GAMES.some((g) => g.best && g.cat === k))];
+  for (const [key, c] of subs) {
+    const b = document.createElement("button");
+    b.className = "cat-chip" + (key === bestSub ? " active" : "");
+    b.textContent = c.label;
+    if (key === bestSub) b.style.background = c.color;
+    b.onclick = () => { bestSub = key; renderSubFilter(); renderGrid(); };
+    bar.appendChild(b);
+  }
+}
+
 function renderGrid() {
   grid.innerHTML = "";
-  let list = GAMES.filter((g) => activeCat === "all" || (activeCat === "best" ? g.best : g.cat === activeCat));
+  renderSubFilter();
+  let list = GAMES.filter((g) => activeCat === "all" ||
+    (activeCat === "best" ? g.best && (bestSub === "all" || g.cat === bestSub) : g.cat === activeCat));
   if (activeCat === "best") list = list.slice().sort((a, b) => a.best - b.best);
   list.forEach((g, idx) => {
     const cat = CATS[g.cat];
@@ -99,7 +120,7 @@ function renderGrid() {
       rk.className = "card-badge";
       rk.style.background = "#ffcf4d";
       rk.style.color = "#222";
-      rk.textContent = ["🥇", "🥈", "🥉"][idx] || `${idx + 1}位`;
+      rk.textContent = ["🥇", "🥈", "🥉"][g.best - 1] || `${g.best}位`;
       thumb.appendChild(rk);
     } else if (g.badge) {
       const bd = document.createElement("span");
