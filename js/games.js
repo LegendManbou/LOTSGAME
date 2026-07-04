@@ -18,6 +18,13 @@ const GAMES = [
   { id: "stumbleguys", name: "Stumble Guys (Web版)", url: "https://poki.com/ja/g/stumble-guys", desc: "大人数おバカ障害物レース", players: "〜32人", cat: "party", emoji: "🤪" },
   { id: "bonk", name: "Bonk.io", url: "https://bonk.io", desc: "物理で押し出す対戦。友達部屋OK", players: "〜8人", cat: "party", emoji: "⚽" },
   { id: "haxball", name: "HaxBall", url: "https://www.haxball.com", desc: "みんなでゆるサッカー。部屋作成可", players: "2〜12人", cat: "party", emoji: "🥅" },
+  { id: "lounge", name: "ラウンジ(終われまてん)", url: "https://loungegame.site", desc: "「一致するまで終われまテン」など配信者定番パーティー集", players: "2人〜", cat: "party", emoji: "🛋️" },
+  { id: "ngword", name: "NGワード(ラウンジ)", url: "https://loungegame.site", desc: "頭の上のNGワードを相手に言わせたら勝ち!", players: "2人〜", cat: "party", emoji: "🙊" },
+  { id: "kahoot", name: "Kahoot!", url: "https://kahoot.it", desc: "世界定番のクイズ大会。PINだけで参加", players: "何人でも", cat: "party", emoji: "❓" },
+  { id: "jackbox", name: "Jackbox Games", url: "https://jackbox.tv", desc: "実況者御用達パーティー集(参加はブラウザ無料)", players: "〜10人", cat: "party", emoji: "📦" },
+  { id: "drawaria", name: "Drawaria.online", url: "https://drawaria.online", desc: "お絵かき当て+自由らくがき部屋", players: "〜30人", cat: "party", emoji: "🖼️" },
+  { id: "bpp", name: "Broken Picture Phone", url: "https://www.brokenpicturephone.com", desc: "絵の伝言ゲーム。ガーティック系の自由版", players: "3人〜", cat: "party", emoji: "📞" },
+  { id: "betrayal", name: "Betrayal.io", url: "https://betrayal.io", desc: "Among Us風の裏切り者探しをブラウザで", players: "〜12人", cat: "mystery", emoji: "🔪" },
 
   // ── 人狼・推理 ──────────────────────────────────────
   { id: "ruru", name: "るる鯖 人狼", url: "https://ruru-jinro.net", desc: "日本語で遊べる本格オンライン人狼", players: "5人〜", cat: "mystery", emoji: "🐺" },
@@ -128,5 +135,21 @@ const CATS = {
   io:      { label: ".io対戦",       color: "#4fc3f7" },
   shooter: { label: "シューター",    color: "#ff5c5c" },
   solo:    { label: "1人でも神ゲー", color: "#26c6da" },
+  best:    { label: "みんなで遊ぶ神ゲー", color: "#ffcf4d" },
   made:    { label: "作ったゲーム",   color: "#e879ff" },
 };
+
+// ── みんなで遊ぶ神ゲー ランキング(実際に盛り上がると実証済みの順・実況者の定番が上位) ──
+const BEST = [
+  "gartic-phone", "lounge", "ngword", "skribbl", "jklm", "makeitmeme", "onuw", "ruru", "smashkarts", "deathbyai",
+  "codenames", "spyfall", "betrayal", "justfall", "gooberdash", "stumbleguys", "bonk", "haxball", "drawaria", "gartic-io",
+  "drawasaurus", "sketchful", "bpp", "stopots", "jackbox", "kahoot", "geoguessr", "openguessr", "cityguesser", "bga",
+  "colonist", "richup", "pokernow", "avalon", "secretdictator", "loveletter", "longwave", "wolvesville", "zombsroyale", "survev",
+  "shellshock", "krunker", "1v1lol", "voxiom", "kirka", "venge", "warbrokers", "narrowone", "repuls", "bloxd",
+  "mcclassic", "drednot", "tetrio", "jstris", "typeracer", "nitrotype", "protobowl", "jeopardylabs", "rocketbot", "basketbros",
+  "tagpro", "curvefever", "slither", "agar", "paperio2", "splix", "superhex", "powerline", "territorial", "openfront",
+  "generals", "diep", "arras", "digdig", "yohoho", "gats", "defly", "starblast", "evades", "moomoo",
+  "zombs", "starve", "taming", "florr", "deeeep", "mope", "lbs", "wormate", "playingcards", "cardgamesio",
+  "playok", "setwf", "hanab", "dominion", "papergames", "lichess", "lishogi", "ogs", "geofs",
+];
+BEST.forEach((id, i) => { const g = GAMES.find((x) => x.id === id); if (g) g.best = i + 1; });

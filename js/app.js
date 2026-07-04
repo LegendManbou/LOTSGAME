@@ -54,8 +54,9 @@ function renderFilter() {
 
 function renderGrid() {
   grid.innerHTML = "";
-  const list = GAMES.filter((g) => activeCat === "all" || g.cat === activeCat);
-  for (const g of list) {
+  let list = GAMES.filter((g) => activeCat === "all" || (activeCat === "best" ? g.best : g.cat === activeCat));
+  if (activeCat === "best") list = list.slice().sort((a, b) => a.best - b.best);
+  list.forEach((g, idx) => {
     const cat = CATS[g.cat];
     const a = document.createElement("a");
     a.className = "card";
@@ -93,7 +94,14 @@ function renderGrid() {
       if (!og) { img.style.objectFit = "contain"; img.style.inset = "18%"; img.style.width = "64%"; img.style.height = "64%"; }
       thumb.appendChild(img);
     }
-    if (g.badge) {
+    if (activeCat === "best") {
+      const rk = document.createElement("span");
+      rk.className = "card-badge";
+      rk.style.background = "#ffcf4d";
+      rk.style.color = "#222";
+      rk.textContent = ["🥇", "🥈", "🥉"][idx] || `${idx + 1}位`;
+      thumb.appendChild(rk);
+    } else if (g.badge) {
       const bd = document.createElement("span");
       bd.className = "card-badge";
       bd.textContent = g.badge;
@@ -117,7 +125,7 @@ function renderGrid() {
     a.append(thumb, body);
     a.addEventListener("click", () => broadcastPick(g));
     grid.appendChild(a);
-  }
+  });
 }
 
 // ────────────────────────── トースト ──────────────────────────
