@@ -881,7 +881,7 @@ function handleMsg(msg) {
       if (G.phase === "aim") {
         G.phase = "fly";
         setPhaseMsg("");
-        setHint(myKeeper() && !myKeeper().dive ? "きた!スワイプで飛びこめ!" : "");
+        setHint(myKeeper() && !myKeeper().dive ? "来た!スワイプで飛び込め!" : "");
       }
       if (isDirector()) host.onKick();
       break;
@@ -921,7 +921,7 @@ function handleMsg(msg) {
       const b = $("bigBanner");
       b.classList.remove("hidden", "goal", "save", "miss");
       b.classList.add("goal");
-      b.innerHTML = `サドンデス!!<small>けっちゃくがつくまで延長だ!</small>`;
+      b.innerHTML = `サドンデス!!<small>決着がつくまで延長だ!</small>`;
       setTimeout(() => b.classList.add("hidden"), 1700);
       break;
     }
@@ -1013,10 +1013,10 @@ function startAimView() {
   G.phase = "aim";
   const meK = myKeeper();
   const meSlot = mySlot();
-  setPhaseMsg(meSlot >= 0 ? "スワイプでシュート!!" : `${G.kickers.map((k) => (k.cpu ? "CPU🤖" : k.name)).join("・")} がねらってる…`);
+  setPhaseMsg(meSlot >= 0 ? "スワイプでシュート!!" : `${G.kickers.map((k) => (k.cpu ? "CPU🤖" : k.name)).join("・")} が狙ってる…`);
   setHint(meSlot >= 0
-    ? "スワイプの向き=コース、長さ=つよさ!弧を描くとカーブ!"
-    : meK ? "まだ左右に動ける!蹴った瞬間からスワイプで飛びこみ(1回だけ)" : "どうなる!?");
+    ? "スワイプの向き=コース、長さ=強さ!弧を描くとカーブ!"
+    : meK ? "まだ左右に動ける!蹴った瞬間からスワイプで飛び込み(1回だけ)" : "どうなる!?");
   // キック制限時間のカウントダウン(黄色)
   const timerEl = $("setTimer");
   timerEl.classList.remove("hidden");
@@ -1066,10 +1066,10 @@ function showVerdict(msg) {
     camShake = 0.22;
   } else if (posts > 0) {
     b.classList.add("miss");
-    b.innerHTML = `ポスト!!<small>${detail || "おしい!わくに当たった!"}</small>`;
+    b.innerHTML = `ポスト!!<small>${detail || "惜しい!枠に当たった!"}</small>`;
   } else {
     b.classList.add("miss");
-    b.innerHTML = `MISS…<small>${detail || "わくの外にとんでいった…"}</small>`;
+    b.innerHTML = `MISS…<small>${detail || "枠の外に飛んでいった…"}</small>`;
   }
   setHint("");
   setTimeout(() => b.classList.add("hidden"), 2600);
@@ -1101,7 +1101,7 @@ function showFinal(scores) {
       }).filter(Boolean).join(" / ");
       const row = document.createElement("div");
       row.className = "rank-row" + (i === 0 ? " first" : "");
-      row.innerHTML = `<span class="medal">${medals[i] || "🎖"}</span><span>${t.emoji} ${esc(t.name)}<small class="rank-sub">${esc(memberNames)}</small></span><span class="pts">${totals[ti]}てん</span>`;
+      row.innerHTML = `<span class="medal">${medals[i] || "🎖"}</span><span>${t.emoji} ${esc(t.name)}<small class="rank-sub">${esc(memberNames)}</small></span><span class="pts">${totals[ti]}点</span>`;
       el.appendChild(row);
     });
   } else {
@@ -1109,7 +1109,7 @@ function showFinal(scores) {
     entries.forEach(([name, pts], i) => {
       const row = document.createElement("div");
       row.className = "rank-row" + (i === 0 ? " first" : "");
-      row.innerHTML = `<span class="medal">${medals[i] || "🎖"}</span><span>${esc(name)}</span><span class="pts">${pts}てん</span>`;
+      row.innerHTML = `<span class="medal">${medals[i] || "🎖"}</span><span>${esc(name)}</span><span class="pts">${pts}点</span>`;
       el.appendChild(row);
     });
   }
@@ -1398,7 +1398,7 @@ chipRow("roomMode", (v) => {
   renderTeamAssign();
 });
 
-// ゲーム中⚙の「こまかいせってい」(ロビー側のチップ表示とも同期)
+// ゲーム中⚙の「細かい設定」(ロビー側のチップ表示とも同期)
 function syncChips(id, v) {
   document.querySelectorAll(`#${id} .chip`).forEach((c) => c.classList.toggle("active", Number(c.dataset.v) === Number(v)));
 }
@@ -1416,7 +1416,7 @@ chipRow("gpCycles", (v) => {
   host.setRemainingCycles(v);
   if (G.mode === "solo") { G.cfg.rounds = v; syncChips("soloRounds", v); }
   else { G.cfg.cycles = v; syncChips("roomCycles", v); }
-  $("gpInfo").textContent = `のこり ${v}周に組みなおしたよ!(ぜんぶで ${host.order.length} ラウンド)`;
+  $("gpInfo").textContent = `残り ${v}周に組み直したよ!(全部で ${host.order.length} ラウンド)`;
 });
 
 // チーム分け(ホストがロビーでタップして振り分け)
@@ -1549,7 +1549,7 @@ function renderGpTeams() {
 function renderGamePanel() {
   if ($("gamePanel").classList.contains("hidden")) return;
   const total = isDirector() ? host.order.length : G.totalRounds;
-  $("gpInfo").textContent = `ラウンド ${G.round}/${total}(のこり ${Math.max(0, total - G.round)})`;
+  $("gpInfo").textContent = `ラウンド ${G.round}/${total}(残り ${Math.max(0, total - G.round)})`;
   syncChips("gpKickers", G.cfg.kickersN);
   syncChips("gpSetDur", G.cfg.setDur);
   syncChips("gpKickLimit", G.cfg.kickLimit);
@@ -1593,7 +1593,7 @@ $("gpClose").onclick = () => $("gamePanel").classList.add("hidden");
 $("gpAddCycle").onclick = () => {
   if (!isDirector()) return;
   host.addCycle();
-  $("gpInfo").textContent = `1周ついかしたよ!(ぜんぶで ${host.order.length} ラウンド)`;
+  $("gpInfo").textContent = `1周追加したよ!(全部で ${host.order.length} ラウンド)`;
 };
 $("gpEnd").onclick = () => {
   if (!isDirector()) return;

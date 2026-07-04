@@ -39,7 +39,7 @@
       <h1 class="game-logo">NEON<span>PK</span></h1>
       <span class="spacer"></span>
     </header>
-    <p class="sub">3DのPK対決⚽ キッカーはスワイプでシュート、キーパーはスワイプで飛びこめ!</p>
+    <p class="sub">3DのPK対決⚽ キッカーはスワイプでシュート、キーパーはスワイプで飛び込め!</p>
 
     <div class="mode-row">
       <button id="modeSolo" class="mode-card active">
@@ -68,7 +68,7 @@
         </div>
       </div>
       <div class="panel-row">
-        <span class="panel-label">なん本勝負(こうたい制)</span>
+        <span class="panel-label">何本勝負(交代制)</span>
         <div class="chip-row" id="soloRounds">
           <button class="chip" data-v="3">3本</button>
           <button class="chip active" data-v="5">5本</button>
@@ -82,8 +82,8 @@
     <!-- 部屋設定 -->
     <div id="roomPanel" class="panel hidden">
       <div class="panel-row">
-        <span class="panel-label">なまえ</span>
-        <input id="nameInput" class="text-input" maxlength="12" placeholder="なまえを入れてね">
+        <span class="panel-label">名前</span>
+        <input id="nameInput" class="text-input" maxlength="12" placeholder="名前を入れてね">
       </div>
       <div class="panel-row">
         <span class="panel-label">部屋ID(4桁)</span>
@@ -136,7 +136,7 @@
 
     <!-- こまかい設定(ソロ・部屋 共通) -->
     <details class="panel adv-panel">
-      <summary>⚙ こまかいせってい</summary>
+      <summary>⚙ 細かい設定</summary>
       <div class="panel-row">
         <span class="panel-label">同時に蹴る人数(ボールの数)</span>
         <div class="chip-row" id="advKickers">
@@ -164,9 +164,9 @@
       <div class="panel-row">
         <span class="panel-label">CPUの強さ</span>
         <div class="chip-row" id="advCpu">
-          <button class="chip" data-v="0">よわい</button>
-          <button class="chip active" data-v="1">ふつう</button>
-          <button class="chip" data-v="2">つよい</button>
+          <button class="chip" data-v="0">弱い</button>
+          <button class="chip active" data-v="1">普通</button>
+          <button class="chip" data-v="2">強い</button>
         </div>
       </div>
       <div class="panel-row">
@@ -178,20 +178,20 @@
       </div>
     </details>
 
-    <p class="credit">3Dグラフィック・ゲームシステムぜんぶオリジナル(LOTSGAME自作)<br>キッカー: 弧を描くスワイプでカーブシュート / キーパー: 蹴る瞬間まで左右に動ける→スワイプで飛びこみ(視点切りかえOK)</p>
+    <p class="credit">3Dグラフィック・ゲームシステム全部オリジナル(LOTSGAME自作)<br>キッカー: 弧を描くスワイプでカーブシュート / キーパー: 蹴る瞬間まで左右に動ける→スワイプで飛び込み(視点切り替えOK)</p>
   </div>
 
   <!-- ── ゲーム中の設定(ホスト/ソロ) ── -->
   <div id="gamePanel" class="overlay hidden">
     <div class="final-panel gp-panel">
-      <h2>⚙ 試合のせってい</h2>
+      <h2>⚙ 試合の設定</h2>
       <div id="gpInfo" class="gp-info"></div>
       <div class="btn-row">
-        <button id="gpAddCycle" class="secondary-btn">➕ 1周ついか</button>
+        <button id="gpAddCycle" class="secondary-btn">➕ 1周追加</button>
         <button id="gpEnd" class="secondary-btn">🏁 ここで終了</button>
       </div>
       <div class="panel-row">
-        <span class="panel-label">のこりなん周(なん本勝負)にする?(いまのラウンドのあとから)</span>
+        <span class="panel-label">残り何周(何本勝負)にする?(今のラウンドの後から)</span>
         <div class="chip-row" id="gpCycles">
           <button class="chip" data-v="1">1周</button>
           <button class="chip" data-v="2">2周</button>
@@ -206,7 +206,7 @@
         <div id="gpTeamList" class="member-list"></div>
       </div>
       <details class="adv-panel gp-adv">
-        <summary>⚙ こまかいせってい(次のラウンドから)</summary>
+        <summary>⚙ 細かい設定(次のラウンドから)</summary>
         <div class="panel-row">
           <span class="panel-label">同時に蹴る人数(ボールの数)</span>
           <div class="chip-row" id="gpKickers">
@@ -234,9 +234,9 @@
         <div class="panel-row">
           <span class="panel-label">CPUの強さ</span>
           <div class="chip-row" id="gpCpu">
-            <button class="chip" data-v="0">よわい</button>
-            <button class="chip" data-v="1">ふつう</button>
-            <button class="chip" data-v="2">つよい</button>
+            <button class="chip" data-v="0">弱い</button>
+            <button class="chip" data-v="1">普通</button>
+            <button class="chip" data-v="2">強い</button>
           </div>
         </div>
         <div class="panel-row">
@@ -248,7 +248,7 @@
         </div>
       </details>
       <div class="btn-row">
-        <button id="gpClose" class="primary-btn">とじる</button>
+        <button id="gpClose" class="primary-btn">閉じる</button>
       </div>
     </div>
   </div>
@@ -256,10 +256,10 @@
   <!-- ── 最終リザルト ── -->
   <div id="finalOverlay" class="overlay hidden">
     <div class="final-panel">
-      <h2 id="finalTitle">けっか はっぴょう!</h2>
+      <h2 id="finalTitle">結果発表!</h2>
       <div id="finalRanking"></div>
       <div class="btn-row">
-        <button id="againBtn" class="primary-btn">🔄 もういちど</button>
+        <button id="againBtn" class="primary-btn">🔄 もう一度</button>
         <button id="lobbyBtn" class="secondary-btn">🏠 ロビーへ</button>
       </div>
     </div>
