@@ -11,6 +11,7 @@ const THUMBS = {
   "lounge": "https://d12wx4jindk56i.cloudfront.net/img/thumbnail/OGP.jpg",
   "ngword": "https://d12wx4jindk56i.cloudfront.net/img/thumbnail/OGP.jpg",
   "gamebuddies": "https://gamebuddies.io/gblogo.webp",
+  "wos": "https://wos.gg/images/cover.png",
   "gamingcouch": "https://gamingcouch.com/og-preview.jpg",
   "latelate": "https://late-late.jp/img/collage.png",
   "ccfolia": "https://ccfolia.com/ccfolia.png",
